@@ -1,0 +1,6 @@
+{
+  "name": "Task Check",
+  "description": "Smart calendar task manager with automatic daily rollover, productivity score tracking, customizable dark mode, and deadline reminders.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
