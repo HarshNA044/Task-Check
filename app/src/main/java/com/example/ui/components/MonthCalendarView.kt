@@ -160,7 +160,9 @@ fun MonthCalendarView(
                             )
                         },
                         colors = AssistChipDefaults.assistChipColors(
-                            containerColor = if (isCurrentMonthToday) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant
+                            containerColor = if (isCurrentMonthToday) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                            labelColor = if (isCurrentMonthToday) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                            leadingIconContentColor = if (isCurrentMonthToday) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                         ),
                         border = null,
                         modifier = Modifier.testTag("calendar_today_chip")
