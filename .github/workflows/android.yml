@@ -11,6 +11,10 @@ jobs:
 
     runs-on: ubuntu-latest
 
+    # Forces the environment to handle older Node actions cleanly if needed
+    env:
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+
     steps:
     - uses: actions/checkout@v4
     
