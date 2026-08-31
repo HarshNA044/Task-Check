@@ -57,6 +57,8 @@ import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
+import androidx.compose.ui.graphics.graphicsLayer
+import kotlin.math.absoluteValue
 
 private const val PAGER_CENTER_INDEX = 1200
 private const val PAGER_TOTAL_PAGES = 2400
@@ -242,22 +244,35 @@ fun MonthCalendarView(
                 }
             }
 
-            // Pager for month grid
+            // Pager for month grid with fluid swipe animation transition
             HorizontalPager(
                 state = pagerState,
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("calendar_horizontal_pager")
             ) { page ->
+                val pageOffset = ((pagerState.currentPage - page) + pagerState.currentPageOffsetFraction).absoluteValue
                 val offset = page - PAGER_CENTER_INDEX
                 val pageMonth = baseMonth.plusMonths(offset.toLong())
 
-                MonthGrid(
-                    month = pageMonth,
-                    selectedDate = selectedDate,
-                    dayBadges = dayBadges,
-                    onDateSelected = onDateSelected
-                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .graphicsLayer {
+                            // Subtle parallax & smooth alpha transition
+                            val scale = 1f - (pageOffset * 0.05f).coerceIn(0f, 0.1f)
+                            scaleX = scale
+                            scaleY = scale
+                            alpha = (1f - (pageOffset * 0.4f)).coerceIn(0.4f, 1f)
+                        }
+                ) {
+                    MonthGrid(
+                        month = pageMonth,
+                        selectedDate = selectedDate,
+                        dayBadges = dayBadges,
+                        onDateSelected = onDateSelected
+                    )
+                }
             }
         }
     }

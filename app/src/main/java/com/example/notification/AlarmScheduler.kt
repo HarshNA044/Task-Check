@@ -11,11 +11,86 @@ import java.util.Calendar
 object AlarmScheduler {
 
     const val EXTRA_REMINDER_TYPE = "extra_reminder_type"
+    const val EXTRA_TASK_ID = "extra_task_id"
+    const val EXTRA_TASK_TITLE = "extra_task_title"
+    const val EXTRA_TASK_PRIORITY = "extra_task_priority"
+    const val EXTRA_DEADLINE_TIME = "extra_deadline_time"
+
     const val TYPE_MORNING = "morning"
     const val TYPE_EVENING = "evening"
+    const val TYPE_DEADLINE = "task_deadline"
 
     private const val REQUEST_CODE_MORNING = 2001
     private const val REQUEST_CODE_EVENING = 2002
+    private const val BASE_REQUEST_CODE_DEADLINE = 30000
+
+    fun scheduleTaskDeadlineAlarm(
+        context: Context,
+        taskId: Long,
+        taskTitle: String,
+        taskPriority: String,
+        deadlineEpochMillis: Long
+    ) {
+        if (deadlineEpochMillis <= System.currentTimeMillis()) {
+            return
+        }
+
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
+        val requestCode = (BASE_REQUEST_CODE_DEADLINE + (taskId % 50000)).toInt()
+
+        val intent = Intent(context, TaskReminderReceiver::class.java).apply {
+            putExtra(EXTRA_REMINDER_TYPE, TYPE_DEADLINE)
+            putExtra(EXTRA_TASK_ID, taskId)
+            putExtra(EXTRA_TASK_TITLE, taskTitle)
+            putExtra(EXTRA_TASK_PRIORITY, taskPriority)
+            putExtra(EXTRA_DEADLINE_TIME, deadlineEpochMillis)
+        }
+
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            requestCode,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
+        )
+
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                alarmManager.setExactAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    deadlineEpochMillis,
+                    pendingIntent
+                )
+            } else {
+                alarmManager.set(
+                    AlarmManager.RTC_WAKEUP,
+                    deadlineEpochMillis,
+                    pendingIntent
+                )
+            }
+        } catch (e: Exception) {
+            alarmManager.set(
+                AlarmManager.RTC_WAKEUP,
+                deadlineEpochMillis,
+                pendingIntent
+            )
+        }
+    }
+
+    fun cancelTaskDeadlineAlarm(context: Context, taskId: Long) {
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
+        val requestCode = (BASE_REQUEST_CODE_DEADLINE + (taskId % 50000)).toInt()
+        val intent = Intent(context, TaskReminderReceiver::class.java)
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            requestCode,
+            intent,
+            PendingIntent.FLAG_NO_CREATE or (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
+        )
+        if (pendingIntent != null) {
+            alarmManager.cancel(pendingIntent)
+            pendingIntent.cancel()
+        }
+    }
 
     fun scheduleDailyReminders(
         context: Context,

@@ -1,11 +1,10 @@
 package com.example.data.model
 
 import androidx.room.Entity
-import androidx.room.PrimaryKey
 
-@Entity(tableName = "productivity_history")
+@Entity(tableName = "productivity_history", primaryKeys = ["userId", "date"])
 data class ProductivityRecordEntity(
-    @PrimaryKey
+    val userId: String = "harshna63@gmail.com",
     val date: String, // "YYYY-MM-DD"
     val completedCount: Int,
     val totalCount: Int,

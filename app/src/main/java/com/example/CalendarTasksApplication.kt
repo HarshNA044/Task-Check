@@ -2,6 +2,7 @@ package com.example
 
 import android.app.Application
 import com.example.data.local.AppDatabase
+import com.example.data.local.ThemePreferences
 import com.example.data.repository.TaskRepository
 import com.example.notification.AlarmScheduler
 import com.example.notification.NotificationHelper
@@ -13,30 +14,46 @@ import java.time.format.DateTimeFormatter
 
 class CalendarTasksApplication : Application() {
 
-    lateinit var repository: TaskRepository
-        private set
+    val repository: TaskRepository by lazy {
+        val database = AppDatabase.getDatabase(this)
+        TaskRepository(database.taskDao())
+    }
 
-    lateinit var themePreferences: com.example.data.local.ThemePreferences
-        private set
+    val themePreferences: ThemePreferences by lazy {
+        ThemePreferences(this)
+    }
+
+    val stepCounterManager: com.example.sensor.StepCounterManager by lazy {
+        com.example.sensor.StepCounterManager(this, themePreferences)
+    }
 
     override fun onCreate() {
         super.onCreate()
-        val database = AppDatabase.getDatabase(this)
-        repository = TaskRepository(database.taskDao())
-        themePreferences = com.example.data.local.ThemePreferences(this)
 
-        NotificationHelper.createNotificationChannel(this)
-        AlarmScheduler.scheduleDailyReminders(
-            context = this,
-            morningHour = themePreferences.morningHour.value,
-            morningMinute = themePreferences.morningMinute.value,
-            eveningHour = themePreferences.eveningHour.value,
-            eveningMinute = themePreferences.eveningMinute.value
-        )
-
+        // Asynchronously initialize notification channels, background alarms, and task rollovers
+        // so the application cold start remains blazing fast, instant and non-blocking
         CoroutineScope(Dispatchers.IO).launch {
-            val todayStr = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
-            repository.rolloverUncompletedTasks(todayStr)
+            try {
+                NotificationHelper.createNotificationChannel(this@CalendarTasksApplication)
+                AlarmScheduler.scheduleDailyReminders(
+                    context = this@CalendarTasksApplication,
+                    morningHour = themePreferences.morningHour.value,
+                    morningMinute = themePreferences.morningMinute.value,
+                    eveningHour = themePreferences.eveningHour.value,
+                    eveningMinute = themePreferences.eveningMinute.value
+                )
+            } catch (e: Exception) {
+                // Non-blocking initialization
+            }
+
+            try {
+                val uid = themePreferences.activeUserId.value
+                val todayStr = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+                repository.rolloverUncompletedTasks(uid, todayStr)
+            } catch (e: Exception) {
+                // Ignore background rollover errors
+            }
         }
     }
 }
+

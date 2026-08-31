@@ -206,6 +206,31 @@ fun UserProfileDialog(
                 }
             }
 
+            // Data Isolation Security Badge
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.VerifiedUser,
+                        contentDescription = null,
+                        tint = Color(0xFF34A853),
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        text = "Data Isolated: Tasks, history & steps belong strictly to active account.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
             // Google Sign-In Card / Status
             if (!userProfile.isGoogleSignedIn) {
                 Card(
@@ -220,12 +245,12 @@ fun UserProfileDialog(
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Text(
-                            text = "Connect Account",
+                            text = "Connect Google Account",
                             style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "Sign in with your Google account to sync profile preferences and personal task schedules.",
+                            text = "Sign in to keep your tasks and step tracking private and isolated to your account.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -267,7 +292,7 @@ fun UserProfileDialog(
                                 }
                                 Spacer(modifier = Modifier.width(12.dp))
                                 Text(
-                                    text = "Continue with Google",
+                                    text = "Sign in as harshna63@gmail.com",
                                     style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
@@ -281,42 +306,47 @@ fun UserProfileDialog(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Row(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Row(
+                            modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Icon(
-                                Icons.Default.VerifiedUser,
-                                contentDescription = "Signed In",
-                                tint = Color(0xFF34A853),
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Column {
-                                Text(
-                                    text = "Signed in with Google",
-                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                                    color = MaterialTheme.colorScheme.onSurface
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.VerifiedUser,
+                                    contentDescription = "Signed In",
+                                    tint = Color(0xFF34A853),
+                                    modifier = Modifier.size(20.dp)
                                 )
-                                Text(
-                                    text = userProfile.email,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                Column {
+                                    Text(
+                                        text = "Signed in with Google",
+                                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = userProfile.email,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
-                        }
-                        OutlinedButton(
-                            onClick = onSignOut,
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.testTag("google_sign_out_button")
-                        ) {
-                            Text("Sign Out", style = MaterialTheme.typography.labelSmall)
+                            OutlinedButton(
+                                onClick = onSignOut,
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.testTag("google_sign_out_button")
+                            ) {
+                                Text("Sign Out", style = MaterialTheme.typography.labelSmall)
+                            }
                         }
                     }
                 }

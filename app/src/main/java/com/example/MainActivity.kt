@@ -43,6 +43,7 @@ import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.DirectionsWalk
 import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Menu
@@ -100,6 +101,7 @@ import com.example.ui.components.MonthCalendarView
 import com.example.ui.components.ProductivityGraphsView
 import com.example.ui.components.ProductivityScoreGauge
 import com.example.ui.components.ReminderSettingsSheet
+import com.example.ui.components.StepCounterTrackerView
 import com.example.ui.components.TaskAddEditDialog
 import com.example.ui.components.TaskItemCard
 import com.example.ui.components.UserProfileDialog
@@ -125,14 +127,14 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
 enum class AppNavTab {
-    CALENDAR, TASKS, STATS, SETTINGS
+    CALENDAR, TASKS, STEPS, STATS, SETTINGS
 }
 
 class MainActivity : ComponentActivity() {
 
     private val viewModel: MainViewModel by viewModels {
         val app = application as CalendarTasksApplication
-        MainViewModel.Factory(app.repository, app.themePreferences)
+        MainViewModel.Factory(app.repository, app.themePreferences, app.stepCounterManager)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -178,6 +180,7 @@ fun CalendarTasksScreen(viewModel: MainViewModel) {
     val eveningHour by viewModel.eveningHour.collectAsStateWithLifecycle()
     val eveningMinute by viewModel.eveningMinute.collectAsStateWithLifecycle()
     val soundEnabled by viewModel.soundEnabled.collectAsStateWithLifecycle()
+    val stepTrackerState by viewModel.stepTrackerState.collectAsStateWithLifecycle()
 
     val morningTimeFormatted = remember(morningHour, morningMinute) {
         java.time.LocalTime.of(morningHour, morningMinute).format(DateTimeFormatter.ofPattern("h:mm a"))
@@ -424,6 +427,32 @@ fun CalendarTasksScreen(viewModel: MainViewModel) {
                     modifier = Modifier.testTag("nav_tab_tasks")
                 )
 
+                // Steps Counter Tab
+                NavigationBarItem(
+                    selected = activeNavTab == AppNavTab.STEPS,
+                    onClick = {
+                        activeNavTab = AppNavTab.STEPS
+                    },
+                    icon = {
+                        Icon(Icons.Default.DirectionsWalk, contentDescription = "Steps")
+                    },
+                    label = {
+                        Text(
+                            "Steps",
+                            fontWeight = if (activeNavTab == AppNavTab.STEPS) FontWeight.Bold else FontWeight.Medium,
+                            fontSize = 10.sp
+                        )
+                    },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = MaterialTheme.colorScheme.primary,
+                        selectedTextColor = MaterialTheme.colorScheme.primary,
+                        indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    ),
+                    modifier = Modifier.testTag("nav_tab_steps")
+                )
+
                 // Stats Tab
                 NavigationBarItem(
                     selected = activeNavTab == AppNavTab.STATS,
@@ -485,15 +514,25 @@ fun CalendarTasksScreen(viewModel: MainViewModel) {
             }
         }
     ) { innerPadding ->
-        LazyColumn(
-            state = listState,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(horizontal = 16.dp),
-            contentPadding = PaddingValues(top = 4.dp, bottom = 80.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
+        if (activeNavTab == AppNavTab.STEPS) {
+            StepCounterTrackerView(
+                state = stepTrackerState,
+                onSetGoal = { viewModel.setStepDailyGoal(it) },
+                onSimulateSteps = { viewModel.simulateWalkSteps(it) },
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+            )
+        } else {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .padding(horizontal = 16.dp),
+                contentPadding = PaddingValues(top = 4.dp, bottom = 80.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
             // Notification Permission Banner (if not granted)
             if (!hasNotificationPermission && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 item {
@@ -918,12 +957,13 @@ fun CalendarTasksScreen(viewModel: MainViewModel) {
                 ) { task ->
                     TaskItemCard(
                         task = task,
-                        onToggleCompletion = { viewModel.toggleTaskCompletion(it) },
+                        onToggleCompletion = { viewModel.toggleTaskCompletion(context, it) },
                         onEditTask = { viewModel.openEditTaskDialog(it) },
-                        onDeleteTask = { viewModel.deleteTask(it) }
+                        onDeleteTask = { viewModel.deleteTask(context, it) }
                     )
                 }
             }
+        }
         }
     }
 
@@ -934,7 +974,7 @@ fun CalendarTasksScreen(viewModel: MainViewModel) {
             taskToEdit = editingTask,
             onDismiss = { viewModel.closeAddEditDialog() },
             onSave = { title, description, date, deadlineEpoch, priority ->
-                viewModel.saveTask(title, description, date, deadlineEpoch, priority)
+                viewModel.saveTask(context, title, description, date, deadlineEpoch, priority)
             }
         )
     }

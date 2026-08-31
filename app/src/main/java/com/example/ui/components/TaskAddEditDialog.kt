@@ -274,6 +274,22 @@ fun TaskAddEditDialog(
                             }
                         }
                     }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = "🔔",
+                            fontSize = 12.sp
+                        )
+                        Text(
+                            text = "A sound notification will alert you at the set task deadline.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
             }
         },

@@ -2,10 +2,15 @@ package com.example.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.BorderStroke
@@ -26,6 +31,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
@@ -49,6 +55,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -57,6 +64,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.TaskEntity
 import com.example.data.model.TaskPriority
+import com.example.ui.theme.TertiaryEmerald
 import com.example.ui.theme.getAdaptivePriorityColors
 import java.time.Instant
 import java.time.ZoneId
@@ -92,14 +100,30 @@ fun TaskItemCard(
         !task.isCompleted && System.currentTimeMillis() > task.deadlineEpochMillis
     }
 
+    // Smooth Completion Animations
     val cardAlpha by animateFloatAsState(
-        targetValue = if (task.isCompleted) 0.65f else 1f,
-        animationSpec = tween(durationMillis = 300),
+        targetValue = if (task.isCompleted) 0.68f else 1f,
+        animationSpec = tween(durationMillis = 350, easing = FastOutSlowInEasing),
         label = "cardAlpha"
     )
 
+    val cardScale by animateFloatAsState(
+        targetValue = if (task.isCompleted) 0.99f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "cardScale"
+    )
+
+    val cardElevation by animateDpAsState(
+        targetValue = if (task.isCompleted) 0.dp else 2.dp,
+        animationSpec = tween(durationMillis = 300),
+        label = "cardElevation"
+    )
+
     val checkboxScale by animateFloatAsState(
-        targetValue = if (task.isCompleted) 1.08f else 1f,
+        targetValue = if (task.isCompleted) 1.15f else 1f,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioMediumBouncy,
             stiffness = Spring.StiffnessMedium
@@ -108,35 +132,46 @@ fun TaskItemCard(
     )
 
     val checkboxBgColor by animateColorAsState(
-        targetValue = if (task.isCompleted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+        targetValue = if (task.isCompleted) TertiaryEmerald else MaterialTheme.colorScheme.surfaceVariant,
         animationSpec = tween(durationMillis = 250),
         label = "checkboxBg"
     )
 
     val cardBorderColor by animateColorAsState(
         targetValue = if (task.isCompleted) {
-            MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+            TertiaryEmerald.copy(alpha = 0.35f)
         } else {
             MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)
         },
-        animationSpec = tween(durationMillis = 250),
+        animationSpec = tween(durationMillis = 300),
         label = "cardBorderColor"
+    )
+
+    val containerColor by animateColorAsState(
+        targetValue = if (task.isCompleted) {
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+        } else {
+            MaterialTheme.colorScheme.surface
+        },
+        animationSpec = tween(durationMillis = 300),
+        label = "cardBgColor"
     )
 
     Card(
         modifier = modifier
             .fillMaxWidth()
+            .scale(cardScale)
             .alpha(cardAlpha)
             .testTag("task_item_card_${task.id}"),
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
+            containerColor = containerColor
         ),
         border = BorderStroke(
             width = 1.dp,
             color = cardBorderColor
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = if (task.isCompleted) 0.dp else 1.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = cardElevation)
     ) {
         Row(
             modifier = Modifier
@@ -144,18 +179,20 @@ fun TaskItemCard(
                 .padding(14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Priority Accent Vertical Bar (rounded-full)
+            // Priority Accent Vertical Bar with Completed transition
             Box(
                 modifier = Modifier
                     .width(4.dp)
                     .height(42.dp)
                     .clip(RoundedCornerShape(percent = 50))
-                    .background(if (task.isCompleted) priorityColors.indicator.copy(alpha = 0.4f) else priorityColors.indicator)
+                    .background(
+                        if (task.isCompleted) TertiaryEmerald.copy(alpha = 0.6f) else priorityColors.indicator
+                    )
             )
 
             Spacer(modifier = Modifier.width(12.dp))
 
-            // Animated Custom Checkbox with Bouncy Click
+            // Animated Celebratory Checkbox with Spring Pop
             Box(
                 modifier = Modifier
                     .scale(checkboxScale)
@@ -166,11 +203,15 @@ fun TaskItemCard(
                     .testTag("task_checkbox_${task.id}"),
                 contentAlignment = Alignment.Center
             ) {
-                if (task.isCompleted) {
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = task.isCompleted,
+                    enter = scaleIn(spring(dampingRatio = Spring.DampingRatioMediumBouncy)) + fadeIn(),
+                    exit = scaleOut() + fadeOut()
+                ) {
                     Icon(
                         imageVector = Icons.Default.Check,
                         contentDescription = "Completed",
-                        tint = MaterialTheme.colorScheme.onPrimary,
+                        tint = Color.White,
                         modifier = Modifier.size(16.dp)
                     )
                 }
@@ -190,7 +231,7 @@ fun TaskItemCard(
                     Text(
                         text = task.title,
                         style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.SemiBold,
+                            fontWeight = if (task.isCompleted) FontWeight.Normal else FontWeight.SemiBold,
                             fontSize = 15.sp,
                             textDecoration = if (task.isCompleted) TextDecoration.LineThrough else TextDecoration.None
                         ),
@@ -200,16 +241,46 @@ fun TaskItemCard(
 
                     Spacer(modifier = Modifier.width(8.dp))
 
-                    // Priority Tag (HIGH / MID / LOW)
-                    PriorityPillBadge(priority = priority)
+                    if (task.isCompleted) {
+                        Surface(
+                            shape = RoundedCornerShape(percent = 50),
+                            color = TertiaryEmerald.copy(alpha = 0.15f)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.CheckCircle,
+                                    contentDescription = null,
+                                    tint = TertiaryEmerald,
+                                    modifier = Modifier.size(11.dp)
+                                )
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text(
+                                    text = "DONE",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold
+                                    ),
+                                    color = TertiaryEmerald
+                                )
+                            }
+                        }
+                    } else {
+                        // Priority Tag (HIGH / MID / LOW)
+                        PriorityPillBadge(priority = priority)
+                    }
                 }
 
                 if (task.description.isNotBlank()) {
                     Spacer(modifier = Modifier.height(3.dp))
                     Text(
                         text = task.description,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            textDecoration = if (task.isCompleted) TextDecoration.LineThrough else TextDecoration.None
+                        ),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (task.isCompleted) 0.55f else 0.85f),
                         maxLines = 2
                     )
                 }
@@ -228,20 +299,20 @@ fun TaskItemCard(
                         Icon(
                             imageVector = Icons.Default.Schedule,
                             contentDescription = "Schedule",
-                            tint = if (isOverdue) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                            tint = if (task.isCompleted) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f) else if (isOverdue) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(14.dp)
                         )
                         Text(
-                            text = if (isOverdue) "Overdue: $deadlineTimeStr" else "Deadline: $deadlineTimeStr",
+                            text = if (task.isCompleted) "Completed ($deadlineTimeStr)" else if (isOverdue) "Overdue: $deadlineTimeStr" else "Deadline: $deadlineTimeStr",
                             style = MaterialTheme.typography.labelSmall.copy(
                                 fontSize = 12.sp,
-                                fontWeight = if (isOverdue) FontWeight.Bold else FontWeight.Medium
+                                fontWeight = if (isOverdue && !task.isCompleted) FontWeight.Bold else FontWeight.Medium
                             ),
-                            color = if (isOverdue) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+                            color = if (task.isCompleted) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f) else if (isOverdue) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
 
-                    if (task.rolloverCount > 0) {
+                    if (task.rolloverCount > 0 && !task.isCompleted) {
                         Surface(
                             shape = RoundedCornerShape(6.dp),
                             color = MaterialTheme.colorScheme.secondaryContainer

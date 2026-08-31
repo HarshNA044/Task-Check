@@ -16,13 +16,14 @@ import com.example.data.model.TaskPriority
 import com.example.data.model.UserProfile
 import com.example.data.repository.TaskRepository
 import com.example.notification.AlarmScheduler
+import com.example.notification.NotificationHelper
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
@@ -35,8 +36,20 @@ import java.time.format.DateTimeFormatter
 @OptIn(ExperimentalCoroutinesApi::class)
 class MainViewModel(
     private val repository: TaskRepository,
-    private val themePreferences: ThemePreferences
+    private val themePreferences: ThemePreferences,
+    val stepCounterManager: com.example.sensor.StepCounterManager
 ) : ViewModel() {
+
+    val activeUserId: StateFlow<String> = themePreferences.activeUserId
+    val stepTrackerState: StateFlow<com.example.sensor.StepTrackerState> = stepCounterManager.trackerState
+
+    fun setStepDailyGoal(goal: Int) {
+        stepCounterManager.setDailyGoal(goal)
+    }
+
+    fun simulateWalkSteps(steps: Int) {
+        stepCounterManager.simulateWalkSession(steps)
+    }
 
     val dateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
 
@@ -82,12 +95,15 @@ class MainViewModel(
     private val _rolloverNotificationCount = MutableStateFlow<Int?>(null)
     val rolloverNotificationCount: StateFlow<Int?> = _rolloverNotificationCount.asStateFlow()
 
-    // Tasks for currently selected day
-    val rawTasksForSelectedDate: StateFlow<List<TaskEntity>> = _selectedDate
-        .flatMapLatest { date ->
-            repository.getTasksForDate(date.format(dateFormatter))
-        }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    // Tasks for currently selected day scoped to active user
+    val rawTasksForSelectedDate: StateFlow<List<TaskEntity>> = combine(
+        _selectedDate,
+        activeUserId
+    ) { date, uid ->
+        Pair(date, uid)
+    }.flatMapLatest { (date, uid) ->
+        repository.getTasksForDate(uid, date.format(dateFormatter))
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // Filtered tasks for UI
     val filteredTasks: StateFlow<List<TaskEntity>> = combine(
@@ -106,13 +122,16 @@ class MainViewModel(
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // All tasks for the visible month to populate calendar day badges
-    val monthTasks: StateFlow<List<TaskEntity>> = _currentMonth
-        .flatMapLatest { ym ->
-            val monthPattern = ym.format(DateTimeFormatter.ofPattern("yyyy-MM"))
-            repository.getTasksForMonth(monthPattern)
-        }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    // All tasks for the visible month to populate calendar day badges scoped to user
+    val monthTasks: StateFlow<List<TaskEntity>> = combine(
+        _currentMonth,
+        activeUserId
+    ) { ym, uid ->
+        Pair(ym, uid)
+    }.flatMapLatest { (ym, uid) ->
+        val monthPattern = ym.format(DateTimeFormatter.ofPattern("yyyy-MM"))
+        repository.getTasksForMonth(uid, monthPattern)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // Badges per day mapped by "yyyy-MM-dd"
     val monthDayBadges: StateFlow<Map<String, DayBadgeInfo>> = monthTasks.flatMapLatest { tasks ->
@@ -129,18 +148,19 @@ class MainViewModel(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
     // Past 7-day tasks for dynamic graph & stats
-    private val past7DaysTasks: StateFlow<List<TaskEntity>> = flow {
+    private val past7DaysTasks: StateFlow<List<TaskEntity>> = activeUserId.flatMapLatest { uid ->
         val today = LocalDate.now()
         val startDateStr = today.minusDays(6).format(dateFormatter)
         val endDateStr = today.format(dateFormatter)
-        emitAll(repository.getTasksForDateRange(startDateStr, endDateStr))
+        repository.getTasksForDateRange(uid, startDateStr, endDateStr)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // Productivity History & 7-Day Stats dynamically calculated from actual tasks
     val productivitySummary: StateFlow<ProductivitySummary> = combine(
         rawTasksForSelectedDate,
-        past7DaysTasks
-    ) { todayTasks, rangeTasks ->
+        past7DaysTasks,
+        activeUserId
+    ) { todayTasks, rangeTasks, uid ->
         val today = LocalDate.now()
         val todayDateStr = today.format(dateFormatter)
 
@@ -162,6 +182,7 @@ class MainViewModel(
             val dTotal = dTasks.size
             val dScore = if (dTasks.isEmpty()) 100 else repository.calculateScore(dTasks)
             ProductivityRecordEntity(
+                userId = uid,
                 date = dStr,
                 completedCount = if (dStr == todayDateStr) completed else dCompleted,
                 totalCount = if (dStr == todayDateStr) total else dTotal,
@@ -206,12 +227,19 @@ class MainViewModel(
 
     init {
         performDailyRollover()
+        // Sync user step tracking
+        viewModelScope.launch {
+            activeUserId.collect { uid ->
+                stepCounterManager.switchUser(uid)
+            }
+        }
     }
 
     fun performDailyRollover() {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
+            val uid = activeUserId.value
             val todayStr = LocalDate.now().format(dateFormatter)
-            val rolledCount = repository.rolloverUncompletedTasks(todayStr)
+            val rolledCount = repository.rolloverUncompletedTasks(uid, todayStr)
             if (rolledCount > 0) {
                 _rolloverNotificationCount.value = rolledCount
             }
@@ -280,27 +308,51 @@ class MainViewModel(
 
     fun updateUserProfile(profile: UserProfile) {
         themePreferences.updateUserProfile(profile)
+        stepCounterManager.switchUser(profile.id)
     }
 
-    fun signInWithGoogle(name: String, email: String) {
-        themePreferences.signInWithGoogle(name, email)
+    fun signInWithGoogle(name: String, email: String, photoUrl: String? = null) {
+        themePreferences.signInWithGoogle(name, email, photoUrl)
+        stepCounterManager.switchUser(email)
+    }
+
+    fun switchAccount(email: String, name: String) {
+        themePreferences.switchAccount(email, name)
+        stepCounterManager.switchUser(email)
     }
 
     fun signOut() {
         themePreferences.signOut()
+        stepCounterManager.switchUser("guest_user")
     }
 
     fun toggleGraphsExpanded() {
         _isGraphsExpanded.value = !_isGraphsExpanded.value
     }
 
-    fun toggleTaskCompletion(task: TaskEntity) {
+    fun toggleTaskCompletion(context: Context, task: TaskEntity) {
         viewModelScope.launch {
             repository.toggleTaskCompletion(task)
+            if (!task.isCompleted) {
+                // Task is now completed, cancel deadline alarm
+                AlarmScheduler.cancelTaskDeadlineAlarm(context, task.id)
+            } else {
+                // Task is marked uncompleted, reschedule if deadline is future
+                if (task.deadlineEpochMillis > System.currentTimeMillis()) {
+                    AlarmScheduler.scheduleTaskDeadlineAlarm(
+                        context = context,
+                        taskId = task.id,
+                        taskTitle = task.title,
+                        taskPriority = task.priority,
+                        deadlineEpochMillis = task.deadlineEpochMillis
+                    )
+                }
+            }
         }
     }
 
     fun saveTask(
+        context: Context,
         title: String,
         description: String,
         date: LocalDate,
@@ -310,8 +362,11 @@ class MainViewModel(
         viewModelScope.launch {
             val currentEditing = _editingTask.value
             val dateStr = date.format(dateFormatter)
-            if (currentEditing != null) {
+            val uid = activeUserId.value
+
+            val taskId = if (currentEditing != null) {
                 val updated = currentEditing.copy(
+                    userId = uid,
                     title = title.trim(),
                     description = description.trim(),
                     date = dateStr,
@@ -319,8 +374,10 @@ class MainViewModel(
                     priority = priority.name
                 )
                 repository.updateTask(updated)
+                updated.id
             } else {
                 val newTask = TaskEntity(
+                    userId = uid,
                     title = title.trim(),
                     description = description.trim(),
                     date = dateStr,
@@ -330,12 +387,30 @@ class MainViewModel(
                 )
                 repository.insertTask(newTask)
             }
+
+            // Schedule exact deadline sound reminder
+            if (deadlineEpoch > System.currentTimeMillis()) {
+                AlarmScheduler.scheduleTaskDeadlineAlarm(
+                    context = context,
+                    taskId = taskId,
+                    taskTitle = title.trim(),
+                    taskPriority = priority.name,
+                    deadlineEpochMillis = deadlineEpoch
+                )
+            }
+
+            // Play task creation confirmation audio chime
+            if (soundEnabled.value) {
+                NotificationHelper.playTaskCreationSound(context)
+            }
+
             closeAddEditDialog()
         }
     }
 
-    fun deleteTask(task: TaskEntity) {
+    fun deleteTask(context: Context, task: TaskEntity) {
         viewModelScope.launch {
+            AlarmScheduler.cancelTaskDeadlineAlarm(context, task.id)
             repository.deleteTask(task)
         }
     }
@@ -367,7 +442,8 @@ class MainViewModel(
 
     fun clearAllTasks() {
         viewModelScope.launch {
-            repository.clearAllData()
+            val uid = activeUserId.value
+            repository.clearAllData(uid)
         }
     }
 
@@ -386,12 +462,13 @@ class MainViewModel(
 
     class Factory(
         private val repository: TaskRepository,
-        private val themePreferences: ThemePreferences
+        private val themePreferences: ThemePreferences,
+        private val stepCounterManager: com.example.sensor.StepCounterManager
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(MainViewModel::class.java)) {
-                return MainViewModel(repository, themePreferences) as T
+                return MainViewModel(repository, themePreferences, stepCounterManager) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class")
         }
