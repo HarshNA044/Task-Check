@@ -1,6 +1,13 @@
 package com.example.ui.components
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -41,6 +48,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -73,9 +82,9 @@ fun TaskItemCard(
         try {
             val instant = Instant.ofEpochMilli(task.deadlineEpochMillis)
             val zonedDateTime = instant.atZone(ZoneId.systemDefault())
-            zonedDateTime.format(DateTimeFormatter.ofPattern("HH:mm"))
+            zonedDateTime.format(DateTimeFormatter.ofPattern("h:mm a"))
         } catch (e: Exception) {
-            "17:00"
+            "5:00 PM"
         }
     }
 
@@ -84,8 +93,34 @@ fun TaskItemCard(
     }
 
     val cardAlpha by animateFloatAsState(
-        targetValue = if (task.isCompleted) 0.55f else 1f,
+        targetValue = if (task.isCompleted) 0.65f else 1f,
+        animationSpec = tween(durationMillis = 300),
         label = "cardAlpha"
+    )
+
+    val checkboxScale by animateFloatAsState(
+        targetValue = if (task.isCompleted) 1.08f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "checkboxScale"
+    )
+
+    val checkboxBgColor by animateColorAsState(
+        targetValue = if (task.isCompleted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+        animationSpec = tween(durationMillis = 250),
+        label = "checkboxBg"
+    )
+
+    val cardBorderColor by animateColorAsState(
+        targetValue = if (task.isCompleted) {
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+        } else {
+            MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)
+        },
+        animationSpec = tween(durationMillis = 250),
+        label = "cardBorderColor"
     )
 
     Card(
@@ -99,7 +134,7 @@ fun TaskItemCard(
         ),
         border = BorderStroke(
             width = 1.dp,
-            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)
+            color = cardBorderColor
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = if (task.isCompleted) 0.dp else 1.dp)
     ) {
@@ -120,14 +155,13 @@ fun TaskItemCard(
 
             Spacer(modifier = Modifier.width(12.dp))
 
-            // Custom Checkbox
+            // Animated Custom Checkbox with Bouncy Click
             Box(
                 modifier = Modifier
-                    .size(26.dp)
+                    .scale(checkboxScale)
+                    .size(28.dp)
                     .clip(CircleShape)
-                    .background(
-                        if (task.isCompleted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
-                    )
+                    .background(checkboxBgColor)
                     .clickable { onToggleCompletion(task) }
                     .testTag("task_checkbox_${task.id}"),
                 contentAlignment = Alignment.Center

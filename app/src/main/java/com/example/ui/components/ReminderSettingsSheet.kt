@@ -19,9 +19,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material.icons.filled.WbTwilight
 import androidx.compose.material3.Button
@@ -36,11 +38,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -62,6 +67,12 @@ import java.time.format.DateTimeFormatter
 @Composable
 fun ReminderSettingsSheet(
     currentThemeMode: AppThemeMode = AppThemeMode.LIGHT,
+    initialMorningHour: Int = 9,
+    initialMorningMinute: Int = 0,
+    initialEveningHour: Int = 17,
+    initialEveningMinute: Int = 30,
+    soundEnabled: Boolean = true,
+    onSoundEnabledChanged: (Boolean) -> Unit = {},
     onThemeModeChanged: (AppThemeMode) -> Unit = {},
     onDismiss: () -> Unit,
     onTestNotification: () -> Unit,
@@ -70,18 +81,18 @@ fun ReminderSettingsSheet(
     val context = LocalContext.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    var morningHour by remember { mutableIntStateOf(9) }
-    var morningMinute by remember { mutableIntStateOf(0) }
+    var morningHour by remember(initialMorningHour) { mutableIntStateOf(initialMorningHour) }
+    var morningMinute by remember(initialMorningMinute) { mutableIntStateOf(initialMorningMinute) }
 
-    var eveningHour by remember { mutableIntStateOf(17) }
-    var eveningMinute by remember { mutableIntStateOf(30) }
+    var eveningHour by remember(initialEveningHour) { mutableIntStateOf(initialEveningHour) }
+    var eveningMinute by remember(initialEveningMinute) { mutableIntStateOf(initialEveningMinute) }
 
     val morningTimeStr = remember(morningHour, morningMinute) {
-        LocalTime.of(morningHour, morningMinute).format(DateTimeFormatter.ofPattern("hh:mm a"))
+        LocalTime.of(morningHour, morningMinute).format(DateTimeFormatter.ofPattern("h:mm a"))
     }
 
     val eveningTimeStr = remember(eveningHour, eveningMinute) {
-        LocalTime.of(eveningHour, eveningMinute).format(DateTimeFormatter.ofPattern("hh:mm a"))
+        LocalTime.of(eveningHour, eveningMinute).format(DateTimeFormatter.ofPattern("h:mm a"))
     }
 
     ModalBottomSheet(
@@ -202,7 +213,7 @@ fun ReminderSettingsSheet(
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "Proactive notifications twice a day before deadlines",
+                        text = "Proactive alerts twice a day before deadlines",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -236,7 +247,10 @@ fun ReminderSettingsSheet(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        modifier = Modifier.weight(1f).padding(end = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Icon(
                             Icons.Default.WbSunny,
                             contentDescription = "Morning Reminder",
@@ -298,7 +312,10 @@ fun ReminderSettingsSheet(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        modifier = Modifier.weight(1f).padding(end = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Icon(
                             Icons.Default.WbTwilight,
                             contentDescription = "Evening Reminder",
@@ -330,6 +347,54 @@ fun ReminderSettingsSheet(
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                         )
                     }
+                }
+            }
+
+            // Sound Notification Toggle Card
+            Card(
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.VolumeUp,
+                            contentDescription = "Sound Alert",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "Reminder Sound Alert",
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "Plays audio notification chime and vibration",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    Switch(
+                        checked = soundEnabled,
+                        onCheckedChange = onSoundEnabledChanged,
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                            checkedTrackColor = MaterialTheme.colorScheme.primary
+                        )
+                    )
                 }
             }
 

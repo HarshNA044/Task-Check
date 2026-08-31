@@ -92,7 +92,9 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.model.AppThemeMode
+import com.example.data.model.Holiday
 import com.example.data.model.TaskPriority
+import com.example.data.model.UserProfile
 import com.example.ui.MainViewModel
 import com.example.ui.components.MonthCalendarView
 import com.example.ui.components.ProductivityGraphsView
@@ -100,6 +102,7 @@ import com.example.ui.components.ProductivityScoreGauge
 import com.example.ui.components.ReminderSettingsSheet
 import com.example.ui.components.TaskAddEditDialog
 import com.example.ui.components.TaskItemCard
+import com.example.ui.components.UserProfileDialog
 import com.example.ui.theme.M3Background
 import com.example.ui.theme.M3BorderOutline
 import com.example.ui.theme.M3BorderSubtle
@@ -162,11 +165,26 @@ fun CalendarTasksScreen(viewModel: MainViewModel) {
     val isGraphsExpanded by viewModel.isGraphsExpanded.collectAsStateWithLifecycle()
     val isAddEditDialogOpen by viewModel.isAddEditDialogOpen.collectAsStateWithLifecycle()
     val editingTask by viewModel.editingTask.collectAsStateWithLifecycle()
+    val userProfile by viewModel.userProfile.collectAsStateWithLifecycle()
+    val isProfileDialogOpen by viewModel.isProfileDialogOpen.collectAsStateWithLifecycle()
+    val selectedDateHoliday by viewModel.selectedDateHoliday.collectAsStateWithLifecycle()
     val isSettingsSheetOpen by viewModel.isSettingsSheetOpen.collectAsStateWithLifecycle()
     val rolloverCount by viewModel.rolloverNotificationCount.collectAsStateWithLifecycle()
     val selectedPriorityFilter by viewModel.selectedPriorityFilter.collectAsStateWithLifecycle()
     val selectedStatusFilter by viewModel.selectedStatusFilter.collectAsStateWithLifecycle()
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
+    val morningHour by viewModel.morningHour.collectAsStateWithLifecycle()
+    val morningMinute by viewModel.morningMinute.collectAsStateWithLifecycle()
+    val eveningHour by viewModel.eveningHour.collectAsStateWithLifecycle()
+    val eveningMinute by viewModel.eveningMinute.collectAsStateWithLifecycle()
+    val soundEnabled by viewModel.soundEnabled.collectAsStateWithLifecycle()
+
+    val morningTimeFormatted = remember(morningHour, morningMinute) {
+        java.time.LocalTime.of(morningHour, morningMinute).format(DateTimeFormatter.ofPattern("h:mm a"))
+    }
+    val eveningTimeFormatted = remember(eveningHour, eveningMinute) {
+        java.time.LocalTime.of(eveningHour, eveningMinute).format(DateTimeFormatter.ofPattern("h:mm a"))
+    }
 
     var activeNavTab by remember { mutableStateOf(AppNavTab.CALENDAR) }
     var isSearchActive by remember { mutableStateOf(false) }
@@ -239,11 +257,11 @@ fun CalendarTasksScreen(viewModel: MainViewModel) {
                         ) {
                             // Task Check App Logo
                             Image(
-                                painter = painterResource(id = R.drawable.ic_launcher_logo_1788004494788),
+                                painter = painterResource(id = R.drawable.app_launcher_logo_1788160462598),
                                 contentDescription = "Task Check Logo",
                                 modifier = Modifier
-                                    .size(34.dp)
-                                    .clip(RoundedCornerShape(8.dp))
+                                    .size(36.dp)
+                                    .clip(RoundedCornerShape(9.dp))
                             )
                             Spacer(modifier = Modifier.width(10.dp))
                             Column {
@@ -266,18 +284,6 @@ fun CalendarTasksScreen(viewModel: MainViewModel) {
                                 )
                             }
                         }
-                    }
-                },
-                navigationIcon = {
-                    IconButton(
-                        onClick = { viewModel.goToToday() },
-                        modifier = Modifier.testTag("appbar_menu_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Menu,
-                            contentDescription = "Menu",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
                     }
                 },
                 actions = {
@@ -308,23 +314,24 @@ fun CalendarTasksScreen(viewModel: MainViewModel) {
                         )
                     }
 
-                    // User avatar indicator (JD) -> open settings
+                    // User Profile Avatar -> Opens Profile & Google Account Manager
                     Box(
                         modifier = Modifier
                             .padding(end = 12.dp)
-                            .size(32.dp)
+                            .size(34.dp)
                             .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primaryContainer)
-                            .clickable { viewModel.openSettingsSheet() },
+                            .background(MaterialTheme.colorScheme.primary)
+                            .clickable { viewModel.openProfileDialog() }
+                            .testTag("appbar_user_profile_avatar"),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "JD",
-                            style = MaterialTheme.typography.labelSmall.copy(
+                            text = if (userProfile.avatarInitial.isNotBlank()) userProfile.avatarInitial else "U",
+                            style = MaterialTheme.typography.labelMedium.copy(
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp
+                                fontSize = 13.sp
                             ),
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                            color = MaterialTheme.colorScheme.onPrimary
                         )
                     }
                 },
@@ -600,6 +607,84 @@ fun CalendarTasksScreen(viewModel: MainViewModel) {
                 )
             }
 
+            // Holiday Information Banner (Displays holiday name and festive details on click/select)
+            if (selectedDateHoliday != null) {
+                item {
+                    val holiday = selectedDateHoliday!!
+                    Card(
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.4f)
+                        ),
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            Color(0xFFF59E0B).copy(alpha = 0.6f)
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("holiday_info_card")
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(42.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFFFEF3C7)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = holiday.emoji,
+                                    fontSize = 20.sp
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.width(12.dp))
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Text(
+                                        text = holiday.name,
+                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                        color = MaterialTheme.colorScheme.onTertiaryContainer
+                                    )
+                                    Surface(
+                                        shape = RoundedCornerShape(4.dp),
+                                        color = Color(0xFFF59E0B).copy(alpha = 0.2f)
+                                    ) {
+                                        Text(
+                                            text = holiday.category,
+                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 10.sp
+                                            ),
+                                            color = Color(0xFFB45309),
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+
+                                if (holiday.description.isNotBlank()) {
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = holiday.description,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.85f)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // 2. Dynamic Productivity Score Card (Professional Polish Style)
             item {
                 ProductivityScoreGauge(
@@ -616,6 +701,49 @@ fun CalendarTasksScreen(viewModel: MainViewModel) {
                     summary = productivitySummary,
                     history = productivityHistory
                 )
+            }
+
+            // Daily Reminders Status Banner
+            item {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { viewModel.openSettingsSheet() }
+                        .testTag("reminder_time_indicator")
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.NotificationsActive,
+                                contentDescription = "Active Reminders",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = "Reminders: $morningTimeFormatted & $eveningTimeFormatted",
+                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                        Text(
+                            text = "Edit",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
             }
 
             // 4. Tasks Section Header ("TODAY'S FOCUS" / "2 Remaining")
@@ -815,15 +943,32 @@ fun CalendarTasksScreen(viewModel: MainViewModel) {
     if (isSettingsSheetOpen) {
         ReminderSettingsSheet(
             currentThemeMode = themeMode,
+            initialMorningHour = morningHour,
+            initialMorningMinute = morningMinute,
+            initialEveningHour = eveningHour,
+            initialEveningMinute = eveningMinute,
+            soundEnabled = soundEnabled,
+            onSoundEnabledChanged = { viewModel.setSoundEnabled(it) },
             onThemeModeChanged = { viewModel.setThemeMode(it) },
             onDismiss = {
                 viewModel.closeSettingsSheet()
                 activeNavTab = AppNavTab.CALENDAR
             },
             onTestNotification = { viewModel.testReminderNotification(context) },
-            onSaveReminderTimes = { morningHour, morningMin, eveningHour, eveningMin ->
-                viewModel.updateReminderTimes(context, morningHour, morningMin, eveningHour, eveningMin)
+            onSaveReminderTimes = { mHour, mMin, eHour, eMin ->
+                viewModel.updateReminderTimes(context, mHour, mMin, eHour, eMin)
             }
+        )
+    }
+
+    // User Profile & Google Account Manager Dialog
+    if (isProfileDialogOpen) {
+        UserProfileDialog(
+            userProfile = userProfile,
+            onDismiss = { viewModel.closeProfileDialog() },
+            onSaveProfile = { viewModel.updateUserProfile(it) },
+            onGoogleSignIn = { name, email -> viewModel.signInWithGoogle(name, email) },
+            onSignOut = { viewModel.signOut() }
         )
     }
 }

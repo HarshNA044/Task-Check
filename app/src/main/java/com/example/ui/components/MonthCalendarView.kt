@@ -47,6 +47,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.DayBadgeInfo
+import com.example.data.model.Holiday
+import com.example.data.model.HolidayProvider
 import com.example.ui.theme.TertiaryEmerald
 import kotlinx.coroutines.launch
 import java.time.DayOfWeek
@@ -337,6 +339,10 @@ private fun DayCell(
 ) {
     val isWeekend = date.dayOfWeek == DayOfWeek.SATURDAY || date.dayOfWeek == DayOfWeek.SUNDAY
 
+    val holiday = remember(date) { HolidayProvider.getHoliday(date) }
+    val isHoliday = holiday != null
+    val holidayColor = Color(0xFFF59E0B) // Amber-Gold holiday indicator
+
     val primaryColor = MaterialTheme.colorScheme.primary
     val onPrimaryColor = MaterialTheme.colorScheme.onPrimary
     val onSurfaceColor = MaterialTheme.colorScheme.onSurface
@@ -354,6 +360,7 @@ private fun DayCell(
     val textColor = when {
         isSelected -> onPrimaryColor
         !isCurrentMonth -> onSurfaceVariantColor.copy(alpha = 0.35f)
+        isHoliday -> holidayColor
         isWeekend -> MaterialTheme.colorScheme.error.copy(alpha = 0.85f)
         else -> onSurfaceColor
     }
@@ -364,9 +371,11 @@ private fun DayCell(
             .clip(CircleShape)
             .background(backgroundColor)
             .then(
-                if (isToday && !isSelected) {
-                    Modifier.border(1.5.dp, primaryColor, CircleShape)
-                } else Modifier
+                when {
+                    isToday && !isSelected -> Modifier.border(1.5.dp, primaryColor, CircleShape)
+                    isHoliday && !isSelected -> Modifier.border(1.5.dp, holidayColor.copy(alpha = 0.85f), CircleShape)
+                    else -> Modifier
+                }
             )
             .clickable { onDateSelected() }
             .testTag("calendar_day_cell_${date.format(DateTimeFormatter.ISO_LOCAL_DATE)}"),
@@ -379,7 +388,7 @@ private fun DayCell(
             Text(
                 text = date.dayOfMonth.toString(),
                 style = MaterialTheme.typography.bodyMedium.copy(
-                    fontWeight = if (isSelected || isToday) FontWeight.Bold else FontWeight.Normal,
+                    fontWeight = if (isSelected || isToday || isHoliday) FontWeight.Bold else FontWeight.Normal,
                     fontSize = 13.sp
                 ),
                 color = textColor,
@@ -387,12 +396,21 @@ private fun DayCell(
             )
 
             // Day Indicator Badges
-            if (badgeInfo != null && badgeInfo.totalTasks > 0) {
-                Row(
-                    modifier = Modifier.padding(top = 1.dp),
-                    horizontalArrangement = Arrangement.spacedBy(2.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+            Row(
+                modifier = Modifier.padding(top = 1.dp),
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (isHoliday) {
+                    Box(
+                        modifier = Modifier
+                            .size(4.dp)
+                            .clip(CircleShape)
+                            .background(if (isSelected) onPrimaryColor else holidayColor)
+                    )
+                }
+
+                if (badgeInfo != null && badgeInfo.totalTasks > 0) {
                     if (badgeInfo.hasRolledOver) {
                         Box(
                             modifier = Modifier
@@ -415,9 +433,9 @@ private fun DayCell(
                             .clip(CircleShape)
                             .background(statusDotColor)
                     )
+                } else if (!isHoliday) {
+                    Spacer(modifier = Modifier.height(4.dp))
                 }
-            } else {
-                Spacer(modifier = Modifier.height(5.dp))
             }
         }
     }

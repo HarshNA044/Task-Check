@@ -169,111 +169,12 @@ class TaskRepository(private val taskDao: TaskDao) {
         return finalScore.coerceIn(0, 100)
     }
 
-    suspend fun checkAndSeedInitialData() = withContext(Dispatchers.IO) {
-        val count = taskDao.getTaskCount()
-        if (count > 0) return@withContext
+    fun getTasksForDateRange(startDate: String, endDate: String): Flow<List<TaskEntity>> {
+        return taskDao.getTasksForDateRange(startDate, endDate)
+    }
 
-        val today = LocalDate.now()
-        val zone = ZoneId.systemDefault()
-
-        // Create a few realistic tasks for today and surrounding days
-        val seedTasks = mutableListOf<TaskEntity>()
-
-        // Yesterday tasks (some completed, showing historical score)
-        val yesterday = today.minusDays(1)
-        val yesterdayStr = yesterday.format(dateFormatter)
-        seedTasks.add(
-            TaskEntity(
-                title = "Review monthly project roadmap",
-                description = "Outline key milestones and deliverables",
-                date = yesterdayStr,
-                deadlineEpochMillis = yesterday.atTime(17, 0).atZone(zone).toInstant().toEpochMilli(),
-                priority = TaskPriority.HIGH.name,
-                isCompleted = true,
-                completedAt = yesterday.atTime(16, 30).atZone(zone).toInstant().toEpochMilli()
-            )
-        )
-        seedTasks.add(
-            TaskEntity(
-                title = "Inbox zero & team check-in",
-                description = "Clear unread emails and catch up on Slack",
-                date = yesterdayStr,
-                deadlineEpochMillis = yesterday.atTime(11, 0).atZone(zone).toInstant().toEpochMilli(),
-                priority = TaskPriority.LOW.name,
-                isCompleted = true,
-                completedAt = yesterday.atTime(10, 45).atZone(zone).toInstant().toEpochMilli()
-            )
-        )
-
-        // Today tasks
-        val todayStr = today.format(dateFormatter)
-        seedTasks.add(
-            TaskEntity(
-                title = "Design calendar dashboard presentation",
-                description = "Prepare slide deck with progress charts and task summaries",
-                date = todayStr,
-                deadlineEpochMillis = today.atTime(15, 0).atZone(zone).toInstant().toEpochMilli(),
-                priority = TaskPriority.HIGH.name,
-                isCompleted = false
-            )
-        )
-        seedTasks.add(
-            TaskEntity(
-                title = "Send sprint deliverables report",
-                description = "Summarize completed tasks and velocity",
-                date = todayStr,
-                deadlineEpochMillis = today.atTime(18, 0).atZone(zone).toInstant().toEpochMilli(),
-                priority = TaskPriority.MEDIUM.name,
-                isCompleted = false
-            )
-        )
-        seedTasks.add(
-            TaskEntity(
-                title = "30-minute fitness & stretch break",
-                description = "Maintain energy and mental clarity",
-                date = todayStr,
-                deadlineEpochMillis = today.atTime(19, 30).atZone(zone).toInstant().toEpochMilli(),
-                priority = TaskPriority.LOW.name,
-                isCompleted = true,
-                completedAt = today.atTime(12, 15).atZone(zone).toInstant().toEpochMilli()
-            )
-        )
-
-        // Tomorrow tasks
-        val tomorrow = today.plusDays(1)
-        val tomorrowStr = tomorrow.format(dateFormatter)
-        seedTasks.add(
-            TaskEntity(
-                title = "Quarterly budget review",
-                description = "Audit upcoming expenses and allocate funds",
-                date = tomorrowStr,
-                deadlineEpochMillis = tomorrow.atTime(14, 0).atZone(zone).toInstant().toEpochMilli(),
-                priority = TaskPriority.HIGH.name,
-                isCompleted = false
-            )
-        )
-
-        taskDao.insertTasks(seedTasks)
-
-        // Seed some history entries for graphs
-        for (i in 6 downTo 1) {
-            val pastD = today.minusDays(i.toLong())
-            val pStr = pastD.format(dateFormatter)
-            val comp = (2..5).random()
-            val uncomp = if (i == 2) 1 else 0
-            val total = comp + uncomp
-            val sc = if (uncomp == 0) 100 else 75
-            taskDao.insertOrUpdateProductivity(
-                ProductivityRecordEntity(
-                    date = pStr,
-                    completedCount = comp,
-                    totalCount = total,
-                    uncompletedCount = uncomp,
-                    score = sc
-                )
-            )
-        }
-
-        updateProductivityForDate(todayStr)
+    suspend fun clearAllData() = withContext(Dispatchers.IO) {
+        taskDao.clearAllTasks()
+        taskDao.clearAllProductivityHistory()
     }
 }

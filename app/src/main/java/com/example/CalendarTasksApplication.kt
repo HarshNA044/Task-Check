@@ -26,10 +26,15 @@ class CalendarTasksApplication : Application() {
         themePreferences = com.example.data.local.ThemePreferences(this)
 
         NotificationHelper.createNotificationChannel(this)
-        AlarmScheduler.scheduleDailyReminders(this)
+        AlarmScheduler.scheduleDailyReminders(
+            context = this,
+            morningHour = themePreferences.morningHour.value,
+            morningMinute = themePreferences.morningMinute.value,
+            eveningHour = themePreferences.eveningHour.value,
+            eveningMinute = themePreferences.eveningMinute.value
+        )
 
         CoroutineScope(Dispatchers.IO).launch {
-            repository.checkAndSeedInitialData()
             val todayStr = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
             repository.rolloverUncompletedTasks(todayStr)
         }

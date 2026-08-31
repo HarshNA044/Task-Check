@@ -55,6 +55,15 @@ interface TaskDao {
     @Query("SELECT * FROM productivity_history WHERE date = :date LIMIT 1")
     suspend fun getProductivityForDate(date: String): ProductivityRecordEntity?
 
+    @Query("SELECT * FROM tasks WHERE date >= :startDate AND date <= :endDate ORDER BY date ASC, isCompleted ASC")
+    fun getTasksForDateRange(startDate: String, endDate: String): Flow<List<TaskEntity>>
+
+    @Query("DELETE FROM tasks")
+    suspend fun clearAllTasks()
+
+    @Query("DELETE FROM productivity_history")
+    suspend fun clearAllProductivityHistory()
+
     @Query("SELECT COUNT(*) FROM tasks")
     suspend fun getTaskCount(): Int
 }
