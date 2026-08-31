@@ -23,7 +23,7 @@ jobs:
         run: gradle wrapper
 
       - name: Build Debug APK
-        run: ./gradlew assembleDebug -Dksp.incremental=false -Dksp.use.classpath.isolation=true
+        run: ./gradlew assembleDebug -Dksp.run.in.process=true -Dorg.gradle.jvmargs="-Xmx2048m -Dksp.run.in.process=true"
 
       - name: Save APK Artifact
         uses: actions/upload-artifact@v4
