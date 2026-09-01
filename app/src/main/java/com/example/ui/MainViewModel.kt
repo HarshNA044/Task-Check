@@ -36,20 +36,11 @@ import java.time.format.DateTimeFormatter
 @OptIn(ExperimentalCoroutinesApi::class)
 class MainViewModel(
     private val repository: TaskRepository,
-    private val themePreferences: ThemePreferences,
-    val stepCounterManager: com.example.sensor.StepCounterManager
+    private val themePreferences: ThemePreferences
 ) : ViewModel() {
 
     val activeUserId: StateFlow<String> = themePreferences.activeUserId
-    val stepTrackerState: StateFlow<com.example.sensor.StepTrackerState> = stepCounterManager.trackerState
-
-    fun setStepDailyGoal(goal: Int) {
-        stepCounterManager.setDailyGoal(goal)
-    }
-
-    fun simulateWalkSteps(steps: Int) {
-        stepCounterManager.simulateWalkSession(steps)
-    }
+    val savedAccounts: StateFlow<List<UserProfile>> = themePreferences.savedAccounts
 
     val dateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
 
@@ -227,12 +218,6 @@ class MainViewModel(
 
     init {
         performDailyRollover()
-        // Sync user step tracking
-        viewModelScope.launch {
-            activeUserId.collect { uid ->
-                stepCounterManager.switchUser(uid)
-            }
-        }
     }
 
     fun performDailyRollover() {
@@ -308,22 +293,22 @@ class MainViewModel(
 
     fun updateUserProfile(profile: UserProfile) {
         themePreferences.updateUserProfile(profile)
-        stepCounterManager.switchUser(profile.id)
+    }
+
+    fun signUpWithGoogle(name: String, email: String, bio: String = "Productive & Focused", photoUrl: String? = null) {
+        themePreferences.signUpWithGoogle(name, email, bio, photoUrl)
     }
 
     fun signInWithGoogle(name: String, email: String, photoUrl: String? = null) {
         themePreferences.signInWithGoogle(name, email, photoUrl)
-        stepCounterManager.switchUser(email)
     }
 
     fun switchAccount(email: String, name: String) {
         themePreferences.switchAccount(email, name)
-        stepCounterManager.switchUser(email)
     }
 
     fun signOut() {
         themePreferences.signOut()
-        stepCounterManager.switchUser("guest_user")
     }
 
     fun toggleGraphsExpanded() {
@@ -388,7 +373,7 @@ class MainViewModel(
                 repository.insertTask(newTask)
             }
 
-            // Schedule exact deadline sound reminder
+            // Schedule exact deadline sound reminder for task due time
             if (deadlineEpoch > System.currentTimeMillis()) {
                 AlarmScheduler.scheduleTaskDeadlineAlarm(
                     context = context,
@@ -397,11 +382,6 @@ class MainViewModel(
                     taskPriority = priority.name,
                     deadlineEpochMillis = deadlineEpoch
                 )
-            }
-
-            // Play task creation confirmation audio chime
-            if (soundEnabled.value) {
-                NotificationHelper.playTaskCreationSound(context)
             }
 
             closeAddEditDialog()
@@ -462,13 +442,12 @@ class MainViewModel(
 
     class Factory(
         private val repository: TaskRepository,
-        private val themePreferences: ThemePreferences,
-        private val stepCounterManager: com.example.sensor.StepCounterManager
+        private val themePreferences: ThemePreferences
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(MainViewModel::class.java)) {
-                return MainViewModel(repository, themePreferences, stepCounterManager) as T
+                return MainViewModel(repository, themePreferences) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class")
         }

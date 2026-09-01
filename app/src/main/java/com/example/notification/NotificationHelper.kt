@@ -5,11 +5,13 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.graphics.BitmapFactory
 import android.media.AudioAttributes
 import android.media.RingtoneManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import com.example.MainActivity
+import com.example.R
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -74,16 +76,6 @@ object NotificationHelper {
         }
     }
 
-    fun playTaskCreationSound(context: Context) {
-        try {
-            val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-            val ringtone = RingtoneManager.getRingtone(context.applicationContext, soundUri)
-            ringtone?.play()
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
     fun showTaskDeadlineAlarm(
         context: Context,
         taskId: Long,
@@ -124,21 +116,33 @@ object NotificationHelper {
 
         val title = "⏰ Task Deadline Reached: $taskTitle"
         val message = "Scheduled deadline at $timeStr is due now! [$priorityBadge]"
-        val bigText = "$message\n\nOpen Chrono Focus to complete or update this task and protect your productivity score."
+        val bigText = "$message\n\nOpen Task Check to complete or update this task and protect your productivity score."
 
-        val notification = NotificationCompat.Builder(context, CHANNEL_DEADLINE_ID)
-            .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+        val largeLogoBitmap = try {
+            BitmapFactory.decodeResource(context.resources, R.drawable.app_user_custom_logo_1788276025844)
+        } catch (e: Exception) {
+            null
+        }
+
+        val notificationBuilder = NotificationCompat.Builder(context, CHANNEL_DEADLINE_ID)
+            .setSmallIcon(R.drawable.ic_notification_task_check)
             .setContentTitle(title)
             .setContentText(message)
             .setStyle(NotificationCompat.BigTextStyle().bigText(bigText))
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setColor(0xFF2563EB.toInt())
             .setSound(soundUri)
             .setVibrate(longArrayOf(0, 400, 250, 400, 250, 400))
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
             .setFullScreenIntent(pendingIntent, false)
-            .build()
+
+        if (largeLogoBitmap != null) {
+            notificationBuilder.setLargeIcon(largeLogoBitmap)
+        }
+
+        val notification = notificationBuilder.build()
 
         val notificationManager =
             context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -188,18 +192,30 @@ object NotificationHelper {
             }
         }
 
-        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_popup_reminder)
+        val largeLogoBitmap = try {
+            BitmapFactory.decodeResource(context.resources, R.drawable.app_user_custom_logo_1788276025844)
+        } catch (e: Exception) {
+            null
+        }
+
+        val notificationBuilder = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_notification_task_check)
             .setContentTitle(title)
             .setContentText(message)
             .setStyle(NotificationCompat.BigTextStyle().bigText(bigText))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setColor(0xFF2563EB.toInt())
             .setSound(soundUri)
             .setVibrate(longArrayOf(0, 250, 200, 250))
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
-            .build()
+
+        if (largeLogoBitmap != null) {
+            notificationBuilder.setLargeIcon(largeLogoBitmap)
+        }
+
+        val notification = notificationBuilder.build()
 
         val notificationManager =
             context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager

@@ -119,7 +119,7 @@ fun ReminderSettingsSheet(
                     horizontalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     Image(
-                        painter = painterResource(id = R.drawable.ic_launcher_logo_1788004494788),
+                        painter = painterResource(id = R.drawable.app_user_custom_logo_1788276025844),
                         contentDescription = "Task Check Logo",
                         contentScale = ContentScale.Crop,
                         modifier = Modifier

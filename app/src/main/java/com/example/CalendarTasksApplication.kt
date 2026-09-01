@@ -23,10 +23,6 @@ class CalendarTasksApplication : Application() {
         ThemePreferences(this)
     }
 
-    val stepCounterManager: com.example.sensor.StepCounterManager by lazy {
-        com.example.sensor.StepCounterManager(this, themePreferences)
-    }
-
     override fun onCreate() {
         super.onCreate()
 

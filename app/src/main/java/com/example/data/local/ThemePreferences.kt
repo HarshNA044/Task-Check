@@ -18,9 +18,9 @@ class ThemePreferences(context: Context) {
 
     private val _themeMode = MutableStateFlow(
         try {
-            AppThemeMode.valueOf(prefs.getString(KEY_THEME_MODE, AppThemeMode.LIGHT.name) ?: AppThemeMode.LIGHT.name)
+            AppThemeMode.valueOf(prefs.getString(KEY_THEME_MODE, AppThemeMode.SYSTEM.name) ?: AppThemeMode.SYSTEM.name)
         } catch (e: Exception) {
-            AppThemeMode.LIGHT
+            AppThemeMode.SYSTEM
         }
     )
     val themeMode: StateFlow<AppThemeMode> = _themeMode.asStateFlow()
@@ -43,12 +43,38 @@ class ThemePreferences(context: Context) {
     private val _userProfile = MutableStateFlow(loadUserProfile())
     val userProfile: StateFlow<UserProfile> = _userProfile.asStateFlow()
 
+    private val _savedAccounts = MutableStateFlow(loadSavedAccounts())
+    val savedAccounts: StateFlow<List<UserProfile>> = _savedAccounts.asStateFlow()
+
+    private fun loadSavedAccounts(): List<UserProfile> {
+        val rawSet = prefs.getStringSet(KEY_SAVED_ACCOUNTS, setOf("harshna63@gmail.com")) ?: setOf("harshna63@gmail.com")
+        val list = mutableListOf<UserProfile>()
+        for (uid in rawSet) {
+            val isGoogle = prefs.getBoolean(KEY_GOOGLE_SIGNED_IN + "_" + uid, true)
+            val name = prefs.getString(KEY_USER_NAME + "_" + uid, if (uid == "harshna63@gmail.com") "Harshna" else uid.substringBefore("@")) ?: "User"
+            val email = prefs.getString(KEY_USER_EMAIL + "_" + uid, uid) ?: uid
+            val bio = prefs.getString(KEY_USER_BIO + "_" + uid, "Productive & Focused") ?: "Productive & Focused"
+            val avatar = prefs.getString(KEY_USER_AVATAR + "_" + uid, if (name.isNotBlank()) name.first().uppercase() else "U") ?: "U"
+            list.add(
+                UserProfile(
+                    id = uid,
+                    name = name,
+                    email = email,
+                    bio = bio,
+                    isGoogleSignedIn = isGoogle,
+                    avatarInitial = avatar
+                )
+            )
+        }
+        return list
+    }
+
     private fun loadUserProfile(): UserProfile {
         val uid = _activeUserId.value
-        val isGoogle = prefs.getBoolean(KEY_GOOGLE_SIGNED_IN + "_" + uid, true)
-        val name = prefs.getString(KEY_USER_NAME + "_" + uid, "Harshna") ?: "Harshna"
-        val email = prefs.getString(KEY_USER_EMAIL + "_" + uid, "harshna63@gmail.com") ?: "harshna63@gmail.com"
-        val bio = prefs.getString(KEY_USER_BIO + "_" + uid, "Stay organized & hit all goals") ?: "Stay organized & hit all goals"
+        val isGoogle = prefs.getBoolean(KEY_GOOGLE_SIGNED_IN + "_" + uid, uid != "guest_user")
+        val name = prefs.getString(KEY_USER_NAME + "_" + uid, if (uid == "harshna63@gmail.com") "Harshna" else if (uid == "guest_user") "Guest User" else uid.substringBefore("@")) ?: "Harshna"
+        val email = prefs.getString(KEY_USER_EMAIL + "_" + uid, if (uid == "guest_user") "guest@local" else uid) ?: "harshna63@gmail.com"
+        val bio = prefs.getString(KEY_USER_BIO + "_" + uid, if (uid == "guest_user") "Offline Local Workspace" else "Stay organized & hit all goals") ?: "Stay organized & hit all goals"
         val avatar = prefs.getString(KEY_USER_AVATAR + "_" + uid, if (name.isNotBlank()) name.first().uppercase() else "H") ?: "H"
         return UserProfile(
             id = uid,
@@ -69,23 +95,31 @@ class ThemePreferences(context: Context) {
         _userProfile.value = profile
         val uid = profile.id.ifBlank { profile.email }
         _activeUserId.value = uid
+        val currentSet = prefs.getStringSet(KEY_SAVED_ACCOUNTS, emptySet())?.toMutableSet() ?: mutableSetOf()
+        if (profile.isGoogleSignedIn && uid != "guest_user") {
+            currentSet.add(uid)
+        }
         prefs.edit()
             .putString(KEY_ACTIVE_USER_ID, uid)
+            .putStringSet(KEY_SAVED_ACCOUNTS, currentSet)
             .putString(KEY_USER_NAME + "_" + uid, profile.name)
             .putString(KEY_USER_EMAIL + "_" + uid, profile.email)
             .putString(KEY_USER_BIO + "_" + uid, profile.bio)
             .putBoolean(KEY_GOOGLE_SIGNED_IN + "_" + uid, profile.isGoogleSignedIn)
             .putString(KEY_USER_AVATAR + "_" + uid, profile.avatarInitial)
             .apply()
+        _savedAccounts.value = loadSavedAccounts()
     }
 
-    fun signInWithGoogle(name: String, email: String, photoUrl: String? = null) {
-        val initial = if (name.isNotBlank()) name.first().uppercase() else "G"
+    fun signUpWithGoogle(name: String, email: String, bio: String = "Productive & Focused", photoUrl: String? = null) {
+        val cleanName = name.trim().ifBlank { email.substringBefore("@").replaceFirstChar { it.uppercase() } }
+        val cleanEmail = email.trim().lowercase()
+        val initial = if (cleanName.isNotBlank()) cleanName.first().uppercase() else "G"
         val profile = UserProfile(
-            id = email,
-            name = name,
-            email = email,
-            bio = "Productive & Focused",
+            id = cleanEmail,
+            name = cleanName,
+            email = cleanEmail,
+            bio = bio.trim(),
             isGoogleSignedIn = true,
             avatarInitial = initial,
             photoUrl = photoUrl
@@ -93,8 +127,12 @@ class ThemePreferences(context: Context) {
         updateUserProfile(profile)
     }
 
+    fun signInWithGoogle(name: String, email: String, photoUrl: String? = null) {
+        signUpWithGoogle(name, email, "Productive & Focused", photoUrl)
+    }
+
     fun switchAccount(email: String, name: String) {
-        signInWithGoogle(name, email)
+        signUpWithGoogle(name, email)
     }
 
     fun signOut() {
@@ -150,5 +188,6 @@ class ThemePreferences(context: Context) {
         private const val KEY_USER_BIO = "key_user_bio"
         private const val KEY_GOOGLE_SIGNED_IN = "key_google_signed_in"
         private const val KEY_USER_AVATAR = "key_user_avatar"
+        private const val KEY_SAVED_ACCOUNTS = "key_saved_accounts"
     }
 }

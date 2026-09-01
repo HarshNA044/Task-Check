@@ -101,7 +101,6 @@ import com.example.ui.components.MonthCalendarView
 import com.example.ui.components.ProductivityGraphsView
 import com.example.ui.components.ProductivityScoreGauge
 import com.example.ui.components.ReminderSettingsSheet
-import com.example.ui.components.StepCounterTrackerView
 import com.example.ui.components.TaskAddEditDialog
 import com.example.ui.components.TaskItemCard
 import com.example.ui.components.UserProfileDialog
@@ -127,14 +126,14 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
 enum class AppNavTab {
-    CALENDAR, TASKS, STEPS, STATS, SETTINGS
+    CALENDAR, TASKS, STATS, SETTINGS
 }
 
 class MainActivity : ComponentActivity() {
 
     private val viewModel: MainViewModel by viewModels {
         val app = application as CalendarTasksApplication
-        MainViewModel.Factory(app.repository, app.themePreferences, app.stepCounterManager)
+        MainViewModel.Factory(app.repository, app.themePreferences)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -180,7 +179,7 @@ fun CalendarTasksScreen(viewModel: MainViewModel) {
     val eveningHour by viewModel.eveningHour.collectAsStateWithLifecycle()
     val eveningMinute by viewModel.eveningMinute.collectAsStateWithLifecycle()
     val soundEnabled by viewModel.soundEnabled.collectAsStateWithLifecycle()
-    val stepTrackerState by viewModel.stepTrackerState.collectAsStateWithLifecycle()
+    val savedAccounts by viewModel.savedAccounts.collectAsStateWithLifecycle()
 
     val morningTimeFormatted = remember(morningHour, morningMinute) {
         java.time.LocalTime.of(morningHour, morningMinute).format(DateTimeFormatter.ofPattern("h:mm a"))
@@ -260,7 +259,7 @@ fun CalendarTasksScreen(viewModel: MainViewModel) {
                         ) {
                             // Task Check App Logo
                             Image(
-                                painter = painterResource(id = R.drawable.app_launcher_logo_1788160462598),
+                                painter = painterResource(id = R.drawable.app_user_custom_logo_1788276025844),
                                 contentDescription = "Task Check Logo",
                                 modifier = Modifier
                                     .size(36.dp)
@@ -427,32 +426,6 @@ fun CalendarTasksScreen(viewModel: MainViewModel) {
                     modifier = Modifier.testTag("nav_tab_tasks")
                 )
 
-                // Steps Counter Tab
-                NavigationBarItem(
-                    selected = activeNavTab == AppNavTab.STEPS,
-                    onClick = {
-                        activeNavTab = AppNavTab.STEPS
-                    },
-                    icon = {
-                        Icon(Icons.Default.DirectionsWalk, contentDescription = "Steps")
-                    },
-                    label = {
-                        Text(
-                            "Steps",
-                            fontWeight = if (activeNavTab == AppNavTab.STEPS) FontWeight.Bold else FontWeight.Medium,
-                            fontSize = 10.sp
-                        )
-                    },
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = MaterialTheme.colorScheme.primary,
-                        selectedTextColor = MaterialTheme.colorScheme.primary,
-                        indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-                    ),
-                    modifier = Modifier.testTag("nav_tab_steps")
-                )
-
                 // Stats Tab
                 NavigationBarItem(
                     selected = activeNavTab == AppNavTab.STATS,
@@ -514,25 +487,15 @@ fun CalendarTasksScreen(viewModel: MainViewModel) {
             }
         }
     ) { innerPadding ->
-        if (activeNavTab == AppNavTab.STEPS) {
-            StepCounterTrackerView(
-                state = stepTrackerState,
-                onSetGoal = { viewModel.setStepDailyGoal(it) },
-                onSimulateSteps = { viewModel.simulateWalkSteps(it) },
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-            )
-        } else {
-            LazyColumn(
-                state = listState,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .padding(horizontal = 16.dp),
-                contentPadding = PaddingValues(top = 4.dp, bottom = 80.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(horizontal = 16.dp),
+            contentPadding = PaddingValues(top = 4.dp, bottom = 80.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
             // Notification Permission Banner (if not granted)
             if (!hasNotificationPermission && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 item {
@@ -742,64 +705,67 @@ fun CalendarTasksScreen(viewModel: MainViewModel) {
                 )
             }
 
-            // Quick Step Counter Summary Card (Direct Dashboard Access)
-            item {
-                Card(
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { activeNavTab = AppNavTab.STEPS }
-                        .testTag("dashboard_step_counter_card")
-                ) {
-                    Row(
+            // Google Account Connection & Sign-Up Banner (when not signed in)
+            if (!userProfile.isGoogleSignedIn) {
+                item {
+                    Card(
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                            .clickable { viewModel.openProfileDialog() }
+                            .testTag("dashboard_google_signup_banner")
                     ) {
                         Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.weight(1f)
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Surface(
-                                shape = CircleShape,
-                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                                modifier = Modifier.size(36.dp)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
                             ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        imageVector = Icons.Default.DirectionsWalk,
-                                        contentDescription = "Steps",
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(20.dp)
+                                Box(
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .clip(CircleShape)
+                                        .background(Color.White)
+                                        .border(1.dp, Color(0xFFE0E0E0), CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "G",
+                                        fontWeight = FontWeight.ExtraBold,
+                                        fontSize = 16.sp,
+                                        color = Color(0xFF4285F4)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column {
+                                    Text(
+                                        text = "Sign Up with Google",
+                                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = "Tap to connect your Google account & backup tasks",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column {
-                                Text(
-                                    text = "Daily Step Tracker",
-                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Text(
-                                    text = "${stepTrackerState.currentSteps} / ${stepTrackerState.dailyGoal} steps (${stepTrackerState.distanceKm} km)",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                            Button(
+                                onClick = { viewModel.openProfileDialog() },
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.height(32.dp)
+                            ) {
+                                Text("Sign Up", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                             }
-                        }
-                        Button(
-                            onClick = { activeNavTab = AppNavTab.STEPS },
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.height(34.dp)
-                        ) {
-                            Text("Open Steps", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -1027,7 +993,6 @@ fun CalendarTasksScreen(viewModel: MainViewModel) {
                 }
             }
         }
-        }
     }
 
     // Add / Edit Task Dialog
@@ -1068,9 +1033,11 @@ fun CalendarTasksScreen(viewModel: MainViewModel) {
     if (isProfileDialogOpen) {
         UserProfileDialog(
             userProfile = userProfile,
+            savedAccounts = savedAccounts,
             onDismiss = { viewModel.closeProfileDialog() },
             onSaveProfile = { viewModel.updateUserProfile(it) },
-            onGoogleSignIn = { name, email -> viewModel.signInWithGoogle(name, email) },
+            onGoogleSignUp = { name, email -> viewModel.signUpWithGoogle(name, email) },
+            onSwitchAccount = { email, name -> viewModel.switchAccount(email, name) },
             onSignOut = { viewModel.signOut() }
         )
     }
