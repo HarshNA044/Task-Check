@@ -31,7 +31,7 @@ class TaskReminderReceiver : BroadcastReceiver() {
                     // Verify if task still exists and is not already completed
                     val existingTask = if (taskId > 0) db.taskDao().getTaskById(taskId) else null
                     if (existingTask == null || !existingTask.isCompleted) {
-                        NotificationHelper.showTaskDeadlineAlarm(
+                        NotificationHelper.showTaskDeadlineNotification(
                             context = context,
                             taskId = taskId,
                             taskTitle = existingTask?.title ?: taskTitle,

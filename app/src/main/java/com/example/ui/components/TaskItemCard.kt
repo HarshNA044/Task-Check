@@ -100,6 +100,31 @@ fun TaskItemCard(
         !task.isCompleted && System.currentTimeMillis() > task.deadlineEpochMillis
     }
 
+    val daysDelayed = remember(task.date, task.originalDate, task.rolloverCount, task.isCompleted) {
+        var days = task.rolloverCount
+        if (!task.originalDate.isNullOrBlank() && task.originalDate != task.date) {
+            try {
+                val orig = java.time.LocalDate.parse(task.originalDate)
+                val current = java.time.LocalDate.parse(task.date)
+                val diff = java.time.temporal.ChronoUnit.DAYS.between(orig, current).toInt()
+                if (diff > days) days = diff
+            } catch (e: Exception) {
+                // fallback
+            }
+        }
+        if (days == 0 && !task.isCompleted) {
+            try {
+                val taskDate = java.time.LocalDate.parse(task.date)
+                val today = java.time.LocalDate.now()
+                val diff = java.time.temporal.ChronoUnit.DAYS.between(taskDate, today).toInt()
+                if (diff > 0) days = diff
+            } catch (e: Exception) {
+                // fallback
+            }
+        }
+        days
+    }
+
     // Smooth Completion Animations
     val cardAlpha by animateFloatAsState(
         targetValue = if (task.isCompleted) 0.68f else 1f,
@@ -241,35 +266,69 @@ fun TaskItemCard(
 
                     Spacer(modifier = Modifier.width(8.dp))
 
-                    if (task.isCompleted) {
-                        Surface(
-                            shape = RoundedCornerShape(percent = 50),
-                            color = TertiaryEmerald.copy(alpha = 0.15f)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        if (daysDelayed > 0 && !task.isCompleted) {
+                            Surface(
+                                shape = RoundedCornerShape(percent = 50),
+                                color = MaterialTheme.colorScheme.errorContainer,
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f))
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.CheckCircle,
-                                    contentDescription = null,
-                                    tint = TertiaryEmerald,
-                                    modifier = Modifier.size(11.dp)
-                                )
-                                Spacer(modifier = Modifier.width(3.dp))
-                                Text(
-                                    text = "DONE",
-                                    style = MaterialTheme.typography.labelSmall.copy(
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.Bold
-                                    ),
-                                    color = TertiaryEmerald
-                                )
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Schedule,
+                                        contentDescription = "Delayed",
+                                        tint = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.size(10.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text(
+                                        text = if (daysDelayed == 1) "Delayed 1 day" else "Delayed $daysDelayed days",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold
+                                        ),
+                                        color = MaterialTheme.colorScheme.onErrorContainer
+                                    )
+                                }
                             }
                         }
-                    } else {
-                        // Priority Tag (HIGH / MID / LOW)
-                        PriorityPillBadge(priority = priority)
+
+                        if (task.isCompleted) {
+                            Surface(
+                                shape = RoundedCornerShape(percent = 50),
+                                color = TertiaryEmerald.copy(alpha = 0.15f)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.CheckCircle,
+                                        contentDescription = null,
+                                        tint = TertiaryEmerald,
+                                        modifier = Modifier.size(11.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text(
+                                        text = "DONE",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold
+                                        ),
+                                        color = TertiaryEmerald
+                                    )
+                                }
+                            }
+                        } else {
+                            // Priority Tag (HIGH / MID / LOW)
+                            PriorityPillBadge(priority = priority)
+                        }
                     }
                 }
 
@@ -312,10 +371,10 @@ fun TaskItemCard(
                         )
                     }
 
-                    if (task.rolloverCount > 0 && !task.isCompleted) {
+                    if (daysDelayed > 0 && !task.isCompleted) {
                         Surface(
                             shape = RoundedCornerShape(6.dp),
-                            color = MaterialTheme.colorScheme.secondaryContainer
+                            color = MaterialTheme.colorScheme.error.copy(alpha = 0.12f)
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
@@ -323,18 +382,18 @@ fun TaskItemCard(
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Bolt,
-                                    contentDescription = "Rolled over",
-                                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    contentDescription = "Delayed",
+                                    tint = MaterialTheme.colorScheme.error,
                                     modifier = Modifier.size(11.dp)
                                 )
                                 Spacer(modifier = Modifier.width(2.dp))
                                 Text(
-                                    text = "+${task.rolloverCount}d",
+                                    text = if (daysDelayed == 1) "1 day delay (moved to next day)" else "$daysDelayed days delay (moved to next day)",
                                     style = MaterialTheme.typography.labelSmall.copy(
                                         fontSize = 10.sp,
                                         fontWeight = FontWeight.Bold
                                     ),
-                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                                    color = MaterialTheme.colorScheme.error
                                 )
                             }
                         }

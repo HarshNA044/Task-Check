@@ -21,8 +21,8 @@ object NotificationHelper {
     const val CHANNEL_ID = "task_daily_reminders_v2"
     const val CHANNEL_NAME = "Daily Task Reminders"
 
-    const val CHANNEL_DEADLINE_ID = "task_deadline_alerts_v2"
-    const val CHANNEL_DEADLINE_NAME = "Task Deadline Sound Alerts"
+    const val CHANNEL_DEADLINE_ID = "task_deadline_notifications_v3"
+    const val CHANNEL_DEADLINE_NAME = "Task Deadline Notifications"
 
     const val NOTIFICATION_ID_MORNING = 1001
     const val NOTIFICATION_ID_EVENING = 1002
@@ -49,22 +49,13 @@ object NotificationHelper {
                 lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
             }
 
-            val alarmSoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-                ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-            val alarmAudioAttributes = AudioAttributes.Builder()
-                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                .setUsage(AudioAttributes.USAGE_ALARM)
-                .build()
-
             val deadlineChannel = NotificationChannel(
                 CHANNEL_DEADLINE_ID,
                 CHANNEL_DEADLINE_NAME,
-                NotificationManager.IMPORTANCE_HIGH
+                NotificationManager.IMPORTANCE_DEFAULT
             ).apply {
-                description = "Sound and vibration alarms triggered at the exact time set for your task deadlines"
+                description = "Notifications delivered when a task deadline is reached"
                 enableVibration(true)
-                vibrationPattern = longArrayOf(0, 400, 250, 400, 250, 400)
-                setSound(alarmSoundUri, alarmAudioAttributes)
                 setShowBadge(true)
                 lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
             }
@@ -76,7 +67,7 @@ object NotificationHelper {
         }
     }
 
-    fun showTaskDeadlineAlarm(
+    fun showTaskDeadlineNotification(
         context: Context,
         taskId: Long,
         taskTitle: String,
@@ -84,9 +75,6 @@ object NotificationHelper {
         deadlineEpochMillis: Long
     ) {
         createNotificationChannel(context)
-
-        val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-            ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
 
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
@@ -109,14 +97,14 @@ object NotificationHelper {
         }
 
         val priorityBadge = when (taskPriority.uppercase()) {
-            "HIGH" -> "🚨 HIGH PRIORITY"
-            "LOW" -> "📝 Low Priority"
-            else -> "⚡ Priority"
+            "HIGH" -> "High Priority"
+            "LOW" -> "Low Priority"
+            else -> "Medium Priority"
         }
 
-        val title = "⏰ Task Deadline Reached: $taskTitle"
-        val message = "Scheduled deadline at $timeStr is due now! [$priorityBadge]"
-        val bigText = "$message\n\nOpen Task Check to complete or update this task and protect your productivity score."
+        val title = "Task Deadline Reached: $taskTitle"
+        val message = "Deadline for this task is reached."
+        val bigText = "Deadline for this task is reached.\n\nTask: $taskTitle ($priorityBadge)\nScheduled: $timeStr"
 
         val largeLogoBitmap = try {
             BitmapFactory.decodeResource(context.resources, R.drawable.app_user_custom_logo_1788276025844)
@@ -129,14 +117,11 @@ object NotificationHelper {
             .setContentTitle(title)
             .setContentText(message)
             .setStyle(NotificationCompat.BigTextStyle().bigText(bigText))
-            .setPriority(NotificationCompat.PRIORITY_MAX)
-            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setColor(0xFF2563EB.toInt())
-            .setSound(soundUri)
-            .setVibrate(longArrayOf(0, 400, 250, 400, 250, 400))
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
-            .setFullScreenIntent(pendingIntent, false)
 
         if (largeLogoBitmap != null) {
             notificationBuilder.setLargeIcon(largeLogoBitmap)
@@ -147,14 +132,17 @@ object NotificationHelper {
         val notificationManager =
             context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         notificationManager.notify(notificationId, notification)
+    }
 
-        // Play loud sound chime immediately
-        try {
-            val ringtone = RingtoneManager.getRingtone(context.applicationContext, soundUri)
-            ringtone?.play()
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
+    fun showTaskDeadlineAlarm(
+        context: Context,
+        taskId: Long,
+        taskTitle: String,
+        taskPriority: String,
+        deadlineEpochMillis: Long
+    ) {
+        // Redirect to standard notification without alarm sound per user request
+        showTaskDeadlineNotification(context, taskId, taskTitle, taskPriority, deadlineEpochMillis)
     }
 
     fun showTaskReminder(

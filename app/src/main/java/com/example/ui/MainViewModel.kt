@@ -125,8 +125,8 @@ class MainViewModel(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // Badges per day mapped by "yyyy-MM-dd"
-    val monthDayBadges: StateFlow<Map<String, DayBadgeInfo>> = monthTasks.flatMapLatest { tasks ->
-        val map = tasks.groupBy { it.date }.mapValues { (date, dayTasks) ->
+    val monthDayBadges: StateFlow<Map<String, DayBadgeInfo>> = monthTasks.map { tasks ->
+        tasks.groupBy { it.date }.mapValues { (date, dayTasks) ->
             DayBadgeInfo(
                 date = date,
                 totalTasks = dayTasks.size,
@@ -135,7 +135,6 @@ class MainViewModel(
                 hasRolledOver = dayTasks.any { it.rolloverCount > 0 }
             )
         }
-        kotlinx.coroutines.flow.flowOf(map)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
     // Past 7-day tasks for dynamic graph & stats
@@ -146,12 +145,18 @@ class MainViewModel(
         repository.getTasksForDateRange(uid, startDateStr, endDateStr)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // Productivity History & 7-Day Stats dynamically calculated from actual tasks
+    // Database productivity history (contains logged negative scores for uncompleted rolled-over days)
+    private val productivityDbHistory: StateFlow<List<ProductivityRecordEntity>> = activeUserId.flatMapLatest { uid ->
+        repository.getProductivityHistory(uid, 30)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Productivity History & 7-Day Stats dynamically calculated from actual tasks and persisted penalties
     val productivitySummary: StateFlow<ProductivitySummary> = combine(
         rawTasksForSelectedDate,
         past7DaysTasks,
+        productivityDbHistory,
         activeUserId
-    ) { todayTasks, rangeTasks, uid ->
+    ) { todayTasks, rangeTasks, dbHistory, uid ->
         val today = LocalDate.now()
         val todayDateStr = today.format(dateFormatter)
 
@@ -167,35 +172,70 @@ class MainViewModel(
         val weeklyRecords = (6 downTo 0).map { offset ->
             val d = today.minusDays(offset.toLong())
             val dStr = d.format(dateFormatter)
-            val dTasks = if (dStr == todayDateStr) todayTasks else (tasksByDate[dStr] ?: emptyList())
-            val dCompleted = dTasks.count { it.isCompleted }
-            val dUncompleted = dTasks.count { !it.isCompleted }
-            val dTotal = dTasks.size
-            val dScore = if (dTasks.isEmpty()) 100 else repository.calculateScore(dTasks)
-            ProductivityRecordEntity(
-                userId = uid,
-                date = dStr,
-                completedCount = if (dStr == todayDateStr) completed else dCompleted,
-                totalCount = if (dStr == todayDateStr) total else dTotal,
-                uncompletedCount = if (dStr == todayDateStr) pending else dUncompleted,
-                score = dScore
-            )
+
+            if (dStr == todayDateStr) {
+                ProductivityRecordEntity(
+                    userId = uid,
+                    date = dStr,
+                    completedCount = completed,
+                    totalCount = total,
+                    uncompletedCount = pending,
+                    score = todayScore
+                )
+            } else {
+                // Check if there is an explicit record in the database for this past date
+                val savedRecord = dbHistory.find { it.date == dStr }
+                val dTasks = tasksByDate[dStr] ?: emptyList()
+                val rolledFromThisDate = (todayTasks + rangeTasks).filter { it.originalDate == dStr }
+
+                if (savedRecord != null) {
+                    savedRecord
+                } else if (dTasks.isNotEmpty() || rolledFromThisDate.isNotEmpty()) {
+                    val allAssociatedTasks = (dTasks + rolledFromThisDate).distinctBy { it.id }
+                    val dCompleted = allAssociatedTasks.count { it.isCompleted }
+                    val dUncompleted = allAssociatedTasks.count { !it.isCompleted || it.rolloverCount > 0 }
+                    val dTotal = allAssociatedTasks.size
+
+                    val score = if (dUncompleted > 0) {
+                        if (dCompleted == 0) -100 else -((dUncompleted.toDouble() / dTotal.toDouble()) * 100.0).toInt().coerceIn(-100, -10)
+                    } else {
+                        100
+                    }
+                    ProductivityRecordEntity(
+                        userId = uid,
+                        date = dStr,
+                        completedCount = dCompleted,
+                        totalCount = dTotal,
+                        uncompletedCount = dUncompleted,
+                        score = score
+                    )
+                } else {
+                    ProductivityRecordEntity(
+                        userId = uid,
+                        date = dStr,
+                        completedCount = 0,
+                        totalCount = 0,
+                        uncompletedCount = 0,
+                        score = 100
+                    )
+                }
+            }
         }
 
-        // Streak: consecutive past days with score >= 70 or 100% completion
+        // Streak: consecutive past days with score >= 70 (breaks if day is negative or uncompleted)
         var streak = 0
         for (offset in 1..6) {
             val rec = weeklyRecords.find { it.date == today.minusDays(offset.toLong()).format(dateFormatter) }
-            if (rec != null && (rec.score >= 70 || (rec.totalCount > 0 && rec.completedCount == rec.totalCount))) {
+            if (rec != null && rec.score >= 70 && rec.score > 0) {
                 streak++
-            } else if (rec != null && rec.totalCount > 0) {
+            } else if (rec != null && (rec.totalCount > 0 || rec.score < 0)) {
                 break
             }
         }
 
-        val daysWithTasks = weeklyRecords.filter { it.totalCount > 0 }
+        val daysWithTasks = weeklyRecords.filter { it.totalCount > 0 || it.score < 0 }
         val avgScore = if (daysWithTasks.isNotEmpty()) {
-            daysWithTasks.map { it.score }.average().toInt()
+            daysWithTasks.map { it.score }.average().toInt().coerceIn(-100, 100)
         } else todayScore
 
         ProductivitySummary(
@@ -211,9 +251,7 @@ class MainViewModel(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ProductivitySummary())
 
     val productivityHistory: StateFlow<List<ProductivityRecordEntity>> = productivitySummary
-        .flatMapLatest { summary ->
-            kotlinx.coroutines.flow.flowOf(summary.weeklyHistory)
-        }
+        .map { summary -> summary.weeklyHistory }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     init {

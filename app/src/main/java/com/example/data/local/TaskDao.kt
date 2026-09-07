@@ -25,6 +25,9 @@ interface TaskDao {
     @Query("SELECT * FROM tasks WHERE userId = :userId AND date < :todayDate AND isCompleted = 0")
     suspend fun getUncompletedTasksBeforeDate(userId: String, todayDate: String): List<TaskEntity>
 
+    @Query("SELECT * FROM tasks WHERE userId = :userId AND date = :date AND isCompleted = 1")
+    suspend fun getCompletedTasksForDate(userId: String, date: String): List<TaskEntity>
+
     @Query("SELECT * FROM tasks WHERE userId = :userId AND isCompleted = 0 AND date = :todayDate ORDER BY priority = 'HIGH' DESC, deadlineEpochMillis ASC")
     suspend fun getPendingTasksForDate(userId: String, todayDate: String): List<TaskEntity>
 

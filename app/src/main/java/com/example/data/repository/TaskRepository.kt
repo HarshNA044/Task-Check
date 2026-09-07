@@ -75,18 +75,53 @@ class TaskRepository(private val taskDao: TaskDao) {
     /**
      * Automatic Rollover: Checks for uncompleted tasks from dates prior to today
      * and rolls them over to today's date, incrementing their rollover count and
-     * logging the historical penalty on past days.
+     * logging the negative productivity score on past days.
      */
     suspend fun rolloverUncompletedTasks(userId: String, todayDate: String): Int = withContext(Dispatchers.IO) {
         val uncompletedPastTasks = taskDao.getUncompletedTasksBeforeDate(userId, todayDate)
         if (uncompletedPastTasks.isEmpty()) return@withContext 0
 
-        val affectedPastDates = mutableSetOf<String>()
         val today = LocalDate.parse(todayDate, dateFormatter)
 
+        // 1. For each past date that had incompleted tasks, log a negative productivity score
+        val tasksByPastDate = uncompletedPastTasks.groupBy { it.date }
+        tasksByPastDate.forEach { (pastDate, uncompletedList) ->
+            val completedList = taskDao.getCompletedTasksForDate(userId, pastDate)
+            val completedCount = completedList.size
+            val uncompletedCount = uncompletedList.size
+            val totalCount = completedCount + uncompletedCount
+
+            // Negative productivity score for incomplete tasks on past days
+            val negativeScore = if (completedCount == 0) {
+                -100
+            } else {
+                val uncompletedRatio = uncompletedCount.toDouble() / totalCount.toDouble()
+                -((uncompletedRatio * 100.0).toInt()).coerceIn(-100, -10)
+            }
+
+            val record = ProductivityRecordEntity(
+                userId = userId,
+                date = pastDate,
+                completedCount = completedCount,
+                totalCount = totalCount,
+                uncompletedCount = uncompletedCount,
+                score = negativeScore
+            )
+            taskDao.insertOrUpdateProductivity(record)
+        }
+
+        // 2. Assign those incompleted tasks to the next day (today) and track exact delay in days
         uncompletedPastTasks.forEach { task ->
-            affectedPastDates.add(task.date)
-            // Compute new deadline for today at the same time-of-day or 6 PM default
+            val origDate = task.originalDate ?: task.date
+            val daysDelayed = try {
+                val orig = LocalDate.parse(origDate, dateFormatter)
+                val diff = java.time.temporal.ChronoUnit.DAYS.between(orig, today).toInt()
+                max(task.rolloverCount + 1, diff)
+            } catch (e: Exception) {
+                task.rolloverCount + 1
+            }
+
+            // Compute new deadline for today at the same time-of-day or end of day
             val originalZone = ZoneId.systemDefault()
             val originalTime = try {
                 val origInstant = java.time.Instant.ofEpochMilli(task.deadlineEpochMillis)
@@ -94,21 +129,22 @@ class TaskRepository(private val taskDao: TaskDao) {
             } catch (e: Exception) {
                 LocalTime.of(18, 0)
             }
-            val newDeadlineEpoch = today.atTime(originalTime).atZone(originalZone).toInstant().toEpochMilli()
+            val candidateDeadline = today.atTime(originalTime).atZone(originalZone).toInstant().toEpochMilli()
+            val newDeadlineEpoch = if (candidateDeadline > System.currentTimeMillis()) {
+                candidateDeadline
+            } else {
+                today.atTime(23, 59, 59).atZone(originalZone).toInstant().toEpochMilli()
+            }
 
             val rolledTask = task.copy(
                 date = todayDate,
-                deadlineEpochMillis = max(newDeadlineEpoch, System.currentTimeMillis()),
-                originalDate = task.originalDate ?: task.date,
-                rolloverCount = task.rolloverCount + 1
+                deadlineEpochMillis = newDeadlineEpoch,
+                originalDate = origDate,
+                rolloverCount = daysDelayed
             )
             taskDao.updateTask(rolledTask)
         }
 
-        // Update past days productivity scores (which penalized them for missed uncompleted tasks)
-        affectedPastDates.forEach { pastDate ->
-            updateProductivityForDate(userId, pastDate)
-        }
         // Update today's productivity score
         updateProductivityForDate(userId, todayDate)
 
@@ -130,7 +166,14 @@ class TaskRepository(private val taskDao: TaskDao) {
         val completed = tasks.count { it.isCompleted }
         val uncompleted = total - completed
 
-        val score = calculateScore(tasks)
+        val todayStr = LocalDate.now().format(dateFormatter)
+        val isPastDate = date < todayStr
+
+        val score = if (isPastDate && uncompleted > 0) {
+            if (completed == 0) -100 else -((uncompleted.toDouble() / total.toDouble()) * 100.0).toInt().coerceIn(-100, -10)
+        } else {
+            calculateScore(tasks)
+        }
 
         val record = ProductivityRecordEntity(
             userId = userId,
@@ -167,11 +210,15 @@ class TaskRepository(private val taskDao: TaskDao) {
         if (maxPossiblePoints == 0) return 100
 
         val completionRatioScore = (earnedPoints.toDouble() / maxPossiblePoints.toDouble()) * 100.0
-        // Penalty impact reduces the raw completion score
         val penaltyFactor = (penaltyPoints.toDouble() / (maxPossiblePoints * 2).toDouble()) * 30.0
-        val finalScore = (completionRatioScore - penaltyFactor).toInt()
 
-        return finalScore.coerceIn(0, 100)
+        val finalScore = if (earnedPoints == 0 && penaltyPoints > 0) {
+            -100
+        } else {
+            (completionRatioScore - penaltyFactor).toInt()
+        }
+
+        return finalScore.coerceIn(-100, 100)
     }
 
     fun getTasksForDateRange(userId: String, startDate: String, endDate: String): Flow<List<TaskEntity>> {

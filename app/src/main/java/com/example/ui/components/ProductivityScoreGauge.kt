@@ -46,7 +46,7 @@ fun ProductivityScoreGauge(
     onToggleGraphs: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val score = summary.todayScore.coerceIn(0, 100)
+    val score = summary.todayScore.coerceIn(-100, 100)
 
     val animatedScore by animateFloatAsState(
         targetValue = score.toFloat(),
@@ -65,16 +65,26 @@ fun ProductivityScoreGauge(
         }
     }
 
-    // Mini bar heights for the sparkline (6 bars as shown in design)
-    val barRatios: List<Float> = remember(summary.weeklyHistory, summary.todayScore) {
+    // Mini bar heights and colors for the sparkline (6 bars as shown in design)
+    val barItems: List<Pair<Float, Boolean>> = remember(summary.weeklyHistory, summary.todayScore) {
         if (summary.weeklyHistory.isNotEmpty()) {
-            val list = summary.weeklyHistory.takeLast(6).map { it.score / 100f }
+            val list = summary.weeklyHistory.takeLast(6).map {
+                val normalized = ((it.score.coerceIn(-100, 100) + 100f) / 200f).coerceIn(0.15f, 1f)
+                Pair(normalized, it.score < 0)
+            }
             if (list.size < 6) {
-                val padding = List(6 - list.size) { 0.4f }
+                val padding = List(6 - list.size) { Pair(0.5f, false) }
                 padding + list
             } else list
         } else {
-            listOf(0.40f, 0.60f, 0.30f, 0.85f, 0.70f, (score / 100f).coerceAtLeast(0.35f))
+            listOf(
+                Pair(0.40f, false),
+                Pair(0.60f, false),
+                Pair(0.30f, false),
+                Pair(0.85f, false),
+                Pair(0.70f, false),
+                Pair(((score + 100f) / 200f).coerceIn(0.15f, 1f), score < 0)
+            )
         }
     }
 
@@ -181,14 +191,14 @@ fun ProductivityScoreGauge(
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
                             modifier = Modifier.fillMaxHeight()
                         ) {
-                            barRatios.forEach { ratio ->
-                                val barHeight = (ratio.coerceIn(0.15f, 1f) * 44).dp
+                            barItems.forEach { (ratio, isNegative) ->
+                                val barHeight = (ratio * 44).dp
                                 Box(
                                     modifier = Modifier
                                         .width(8.dp)
                                         .height(barHeight)
                                         .clip(RoundedCornerShape(topStart = 3.dp, topEnd = 3.dp))
-                                    .background(MaterialTheme.colorScheme.primary)
+                                        .background(if (isNegative) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
                                 )
                             }
                         }

@@ -576,7 +576,7 @@ fun CalendarTasksScreen(viewModel: MainViewModel) {
                                     color = MaterialTheme.colorScheme.onSecondaryContainer
                                 )
                                 Text(
-                                    text = "$rolloverCount uncompleted task(s) were moved to today. Uncompleted tasks penalized yesterday's score.",
+                                    text = "$rolloverCount uncompleted task(s) assigned to next day. Showing as negative in productivity graph with days delayed tracking.",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.85f)
                                 )

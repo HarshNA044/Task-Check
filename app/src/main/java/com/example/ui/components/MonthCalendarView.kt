@@ -363,14 +363,7 @@ private fun DayCell(
     val onSurfaceColor = MaterialTheme.colorScheme.onSurface
     val onSurfaceVariantColor = MaterialTheme.colorScheme.onSurfaceVariant
 
-    val backgroundColor by animateColorAsState(
-        targetValue = when {
-            isSelected -> primaryColor
-            else -> Color.Transparent
-        },
-        animationSpec = tween(durationMillis = 200),
-        label = "cellBg"
-    )
+    val backgroundColor = if (isSelected) primaryColor else Color.Transparent
 
     val textColor = when {
         isSelected -> onPrimaryColor
