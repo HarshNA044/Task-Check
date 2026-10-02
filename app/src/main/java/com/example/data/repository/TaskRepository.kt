@@ -15,37 +15,40 @@ import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import kotlin.math.max
-import kotlin.math.min
 
+/**
+ * Local-only TaskRepository that stores and retrieves all data directly
+ * from the device's Room SQLite database.
+ */
 class TaskRepository(private val taskDao: TaskDao) {
 
     private val dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
 
-    fun getTasksForDate(userId: String, date: String): Flow<List<TaskEntity>> {
-        return taskDao.getTasksForDate(userId, date)
+    fun getTasksForDate(date: String): Flow<List<TaskEntity>> {
+        return taskDao.getTasksForDate(date)
     }
 
-    fun getTasksForMonth(userId: String, yearMonthPrefix: String): Flow<List<TaskEntity>> {
-        return taskDao.getTasksForMonth(userId, "$yearMonthPrefix%")
+    fun getTasksForMonth(yearMonthPrefix: String): Flow<List<TaskEntity>> {
+        return taskDao.getTasksForMonth("$yearMonthPrefix%")
     }
 
-    fun getAllTasks(userId: String): Flow<List<TaskEntity>> {
-        return taskDao.getAllTasks(userId)
+    fun getAllTasks(): Flow<List<TaskEntity>> {
+        return taskDao.getAllTasks()
     }
 
-    fun getProductivityHistory(userId: String, limit: Int = 30): Flow<List<ProductivityRecordEntity>> {
-        return taskDao.getProductivityHistory(userId, limit)
+    fun getProductivityHistory(limit: Int = 30): Flow<List<ProductivityRecordEntity>> {
+        return taskDao.getProductivityHistory(limit)
     }
 
     suspend fun insertTask(task: TaskEntity): Long = withContext(Dispatchers.IO) {
         val id = taskDao.insertTask(task)
-        updateProductivityForDate(task.userId, task.date)
+        updateProductivityForDate(task.date)
         id
     }
 
     suspend fun updateTask(task: TaskEntity) = withContext(Dispatchers.IO) {
         taskDao.updateTask(task)
-        updateProductivityForDate(task.userId, task.date)
+        updateProductivityForDate(task.date)
     }
 
     suspend fun getTaskById(id: Long): TaskEntity? = withContext(Dispatchers.IO) {
@@ -59,17 +62,17 @@ class TaskRepository(private val taskDao: TaskDao) {
             completedAt = if (newCompleted) System.currentTimeMillis() else null
         )
         taskDao.updateTask(updated)
-        updateProductivityForDate(task.userId, task.date)
+        updateProductivityForDate(task.date)
     }
 
     suspend fun deleteTask(task: TaskEntity) = withContext(Dispatchers.IO) {
         taskDao.deleteTask(task)
-        updateProductivityForDate(task.userId, task.date)
+        updateProductivityForDate(task.date)
     }
 
-    suspend fun deleteTaskById(userId: String, id: Long, date: String) = withContext(Dispatchers.IO) {
+    suspend fun deleteTaskById(id: Long, date: String) = withContext(Dispatchers.IO) {
         taskDao.deleteTaskById(id)
-        updateProductivityForDate(userId, date)
+        updateProductivityForDate(date)
     }
 
     /**
@@ -77,21 +80,20 @@ class TaskRepository(private val taskDao: TaskDao) {
      * and rolls them over to today's date, incrementing their rollover count and
      * logging the negative productivity score on past days.
      */
-    suspend fun rolloverUncompletedTasks(userId: String, todayDate: String): Int = withContext(Dispatchers.IO) {
-        val uncompletedPastTasks = taskDao.getUncompletedTasksBeforeDate(userId, todayDate)
+    suspend fun rolloverUncompletedTasks(todayDate: String): Int = withContext(Dispatchers.IO) {
+        val uncompletedPastTasks = taskDao.getUncompletedTasksBeforeDate(todayDate)
         if (uncompletedPastTasks.isEmpty()) return@withContext 0
 
         val today = LocalDate.parse(todayDate, dateFormatter)
 
-        // 1. For each past date that had incompleted tasks, log a negative productivity score
+        // 1. For each past date that had uncompleted tasks, log a negative productivity score
         val tasksByPastDate = uncompletedPastTasks.groupBy { it.date }
         tasksByPastDate.forEach { (pastDate, uncompletedList) ->
-            val completedList = taskDao.getCompletedTasksForDate(userId, pastDate)
+            val completedList = taskDao.getCompletedTasksForDate(pastDate)
             val completedCount = completedList.size
             val uncompletedCount = uncompletedList.size
             val totalCount = completedCount + uncompletedCount
 
-            // Negative productivity score for incomplete tasks on past days
             val negativeScore = if (completedCount == 0) {
                 -100
             } else {
@@ -100,7 +102,7 @@ class TaskRepository(private val taskDao: TaskDao) {
             }
 
             val record = ProductivityRecordEntity(
-                userId = userId,
+                userId = "local_device",
                 date = pastDate,
                 completedCount = completedCount,
                 totalCount = totalCount,
@@ -146,22 +148,22 @@ class TaskRepository(private val taskDao: TaskDao) {
         }
 
         // Update today's productivity score
-        updateProductivityForDate(userId, todayDate)
+        updateProductivityForDate(todayDate)
 
         return@withContext uncompletedPastTasks.size
     }
 
-    suspend fun getUpcomingDeadlines(userId: String): List<TaskEntity> = withContext(Dispatchers.IO) {
+    suspend fun getUpcomingDeadlines(): List<TaskEntity> = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
-        taskDao.getUpcomingDeadlines(userId, now)
+        taskDao.getUpcomingDeadlines(now)
     }
 
-    suspend fun getPendingTasksForDate(userId: String, date: String): List<TaskEntity> = withContext(Dispatchers.IO) {
-        taskDao.getPendingTasksForDate(userId, date)
+    suspend fun getPendingTasksForDate(date: String): List<TaskEntity> = withContext(Dispatchers.IO) {
+        taskDao.getPendingTasksForDate(date)
     }
 
-    suspend fun updateProductivityForDate(userId: String, date: String) = withContext(Dispatchers.IO) {
-        val tasks = taskDao.getTasksForDate(userId, date).firstOrNull() ?: emptyList()
+    suspend fun updateProductivityForDate(date: String) = withContext(Dispatchers.IO) {
+        val tasks = taskDao.getTasksForDate(date).firstOrNull() ?: emptyList()
         val total = tasks.size
         val completed = tasks.count { it.isCompleted }
         val uncompleted = total - completed
@@ -176,7 +178,7 @@ class TaskRepository(private val taskDao: TaskDao) {
         }
 
         val record = ProductivityRecordEntity(
-            userId = userId,
+            userId = "local_device",
             date = date,
             completedCount = completed,
             totalCount = total,
@@ -221,12 +223,12 @@ class TaskRepository(private val taskDao: TaskDao) {
         return finalScore.coerceIn(-100, 100)
     }
 
-    fun getTasksForDateRange(userId: String, startDate: String, endDate: String): Flow<List<TaskEntity>> {
-        return taskDao.getTasksForDateRange(userId, startDate, endDate)
+    fun getTasksForDateRange(startDate: String, endDate: String): Flow<List<TaskEntity>> {
+        return taskDao.getTasksForDateRange(startDate, endDate)
     }
 
-    suspend fun clearAllData(userId: String) = withContext(Dispatchers.IO) {
-        taskDao.clearAllTasks(userId)
-        taskDao.clearAllProductivityHistory(userId)
+    suspend fun clearAllData() = withContext(Dispatchers.IO) {
+        taskDao.clearAllTasks()
+        taskDao.clearAllProductivityHistory()
     }
 }

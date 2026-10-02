@@ -579,3 +579,91 @@ private data class Tuple4<A, B, C, D>(
     val third: C,
     val fourth: D
 )
+
+@Composable
+fun SaaSScoringRulesCard(modifier: Modifier = Modifier) {
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag("saas_scoring_rules_card"),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp)
+                )
+                Text(
+                    text = "Productivity Scoring Engine",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+
+            Text(
+                text = "Dynamic execution velocity is computed in real-time on your device using priority weights and deadline accountability:",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                listOf(
+                    Triple("High", "+30 pts", Color(0xFFEF4444)),
+                    Triple("Medium", "+20 pts", Color(0xFF2563EB)),
+                    Triple("Low", "+10 pts", Color(0xFF10B981))
+                ).forEach { (prio, pts, col) ->
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = col.copy(alpha = 0.12f),
+                        border = BorderStroke(1.dp, col.copy(alpha = 0.3f)),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(vertical = 8.dp, horizontal = 6.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(prio, style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = col)
+                            Text(pts, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold), color = col)
+                        }
+                    }
+                }
+            }
+
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text("⚠️", fontSize = 14.sp)
+                    Text(
+                        text = "Rollover Penalty: Incomplete tasks automatically rolled over deduct -15 to -30 pts per delayed day to promote momentum.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
+}

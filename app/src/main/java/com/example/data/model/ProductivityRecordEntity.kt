@@ -4,7 +4,7 @@ import androidx.room.Entity
 
 @Entity(tableName = "productivity_history", primaryKeys = ["userId", "date"])
 data class ProductivityRecordEntity(
-    val userId: String = "harshna63@gmail.com",
+    val userId: String = "local_device",
     val date: String, // "YYYY-MM-DD"
     val completedCount: Int,
     val totalCount: Int,

@@ -7,7 +7,7 @@ import androidx.room.PrimaryKey
 data class TaskEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
-    val userId: String = "harshna63@gmail.com", // Scoped per user account to isolate data
+    val userId: String = "local_device", // Maintained for local room schema compatibility
     val title: String,
     val description: String = "",
     val date: String, // "YYYY-MM-DD"

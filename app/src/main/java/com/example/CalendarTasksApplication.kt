@@ -43,13 +43,11 @@ class CalendarTasksApplication : Application() {
             }
 
             try {
-                val uid = themePreferences.activeUserId.value
                 val todayStr = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
-                repository.rolloverUncompletedTasks(uid, todayStr)
+                repository.rolloverUncompletedTasks(todayStr)
             } catch (e: Exception) {
                 // Ignore background rollover errors
             }
         }
     }
 }
-

@@ -13,26 +13,26 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface TaskDao {
 
-    @Query("SELECT * FROM tasks WHERE userId = :userId AND date = :date ORDER BY isCompleted ASC, priority = 'HIGH' DESC, priority = 'MEDIUM' DESC, deadlineEpochMillis ASC")
-    fun getTasksForDate(userId: String, date: String): Flow<List<TaskEntity>>
+    @Query("SELECT * FROM tasks WHERE date = :date ORDER BY isCompleted ASC, priority = 'HIGH' DESC, priority = 'MEDIUM' DESC, deadlineEpochMillis ASC")
+    fun getTasksForDate(date: String): Flow<List<TaskEntity>>
 
-    @Query("SELECT * FROM tasks WHERE userId = :userId AND date LIKE :monthPattern ORDER BY date ASC, isCompleted ASC")
-    fun getTasksForMonth(userId: String, monthPattern: String): Flow<List<TaskEntity>>
+    @Query("SELECT * FROM tasks WHERE date LIKE :monthPattern ORDER BY date ASC, isCompleted ASC")
+    fun getTasksForMonth(monthPattern: String): Flow<List<TaskEntity>>
 
-    @Query("SELECT * FROM tasks WHERE userId = :userId ORDER BY date DESC, isCompleted ASC")
-    fun getAllTasks(userId: String): Flow<List<TaskEntity>>
+    @Query("SELECT * FROM tasks ORDER BY date DESC, isCompleted ASC")
+    fun getAllTasks(): Flow<List<TaskEntity>>
 
-    @Query("SELECT * FROM tasks WHERE userId = :userId AND date < :todayDate AND isCompleted = 0")
-    suspend fun getUncompletedTasksBeforeDate(userId: String, todayDate: String): List<TaskEntity>
+    @Query("SELECT * FROM tasks WHERE date < :todayDate AND isCompleted = 0")
+    suspend fun getUncompletedTasksBeforeDate(todayDate: String): List<TaskEntity>
 
-    @Query("SELECT * FROM tasks WHERE userId = :userId AND date = :date AND isCompleted = 1")
-    suspend fun getCompletedTasksForDate(userId: String, date: String): List<TaskEntity>
+    @Query("SELECT * FROM tasks WHERE date = :date AND isCompleted = 1")
+    suspend fun getCompletedTasksForDate(date: String): List<TaskEntity>
 
-    @Query("SELECT * FROM tasks WHERE userId = :userId AND isCompleted = 0 AND date = :todayDate ORDER BY priority = 'HIGH' DESC, deadlineEpochMillis ASC")
-    suspend fun getPendingTasksForDate(userId: String, todayDate: String): List<TaskEntity>
+    @Query("SELECT * FROM tasks WHERE isCompleted = 0 AND date = :todayDate ORDER BY priority = 'HIGH' DESC, deadlineEpochMillis ASC")
+    suspend fun getPendingTasksForDate(todayDate: String): List<TaskEntity>
 
-    @Query("SELECT * FROM tasks WHERE userId = :userId AND isCompleted = 0 AND deadlineEpochMillis > :fromTimestamp ORDER BY deadlineEpochMillis ASC LIMIT 5")
-    suspend fun getUpcomingDeadlines(userId: String, fromTimestamp: Long): List<TaskEntity>
+    @Query("SELECT * FROM tasks WHERE isCompleted = 0 AND deadlineEpochMillis > :fromTimestamp ORDER BY deadlineEpochMillis ASC LIMIT 5")
+    suspend fun getUpcomingDeadlines(fromTimestamp: Long): List<TaskEntity>
 
     @Query("SELECT * FROM tasks WHERE id = :id LIMIT 1")
     suspend fun getTaskById(id: Long): TaskEntity?
@@ -55,21 +55,21 @@ interface TaskDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOrUpdateProductivity(record: ProductivityRecordEntity)
 
-    @Query("SELECT * FROM productivity_history WHERE userId = :userId ORDER BY date DESC LIMIT :limit")
-    fun getProductivityHistory(userId: String, limit: Int = 30): Flow<List<ProductivityRecordEntity>>
+    @Query("SELECT * FROM productivity_history ORDER BY date DESC LIMIT :limit")
+    fun getProductivityHistory(limit: Int = 30): Flow<List<ProductivityRecordEntity>>
 
-    @Query("SELECT * FROM productivity_history WHERE userId = :userId AND date = :date LIMIT 1")
-    suspend fun getProductivityForDate(userId: String, date: String): ProductivityRecordEntity?
+    @Query("SELECT * FROM productivity_history WHERE date = :date LIMIT 1")
+    suspend fun getProductivityForDate(date: String): ProductivityRecordEntity?
 
-    @Query("SELECT * FROM tasks WHERE userId = :userId AND date >= :startDate AND date <= :endDate ORDER BY date ASC, isCompleted ASC")
-    fun getTasksForDateRange(userId: String, startDate: String, endDate: String): Flow<List<TaskEntity>>
+    @Query("SELECT * FROM tasks WHERE date >= :startDate AND date <= :endDate ORDER BY date ASC, isCompleted ASC")
+    fun getTasksForDateRange(startDate: String, endDate: String): Flow<List<TaskEntity>>
 
-    @Query("DELETE FROM tasks WHERE userId = :userId")
-    suspend fun clearAllTasks(userId: String)
+    @Query("DELETE FROM tasks")
+    suspend fun clearAllTasks()
 
-    @Query("DELETE FROM productivity_history WHERE userId = :userId")
-    suspend fun clearAllProductivityHistory(userId: String)
+    @Query("DELETE FROM productivity_history")
+    suspend fun clearAllProductivityHistory()
 
-    @Query("SELECT COUNT(*) FROM tasks WHERE userId = :userId")
-    suspend fun getTaskCount(userId: String): Int
+    @Query("SELECT COUNT(*) FROM tasks")
+    suspend fun getTaskCount(): Int
 }

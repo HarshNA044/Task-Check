@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.WbSunny

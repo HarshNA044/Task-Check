@@ -43,8 +43,8 @@ class TaskReminderReceiver : BroadcastReceiver() {
                 }
 
                 val todayStr = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
-                // Check all pending tasks across the system
-                val pendingTasks = db.taskDao().getPendingTasksForDate("harshna63@gmail.com", todayStr)
+                // Check all pending tasks on the local device
+                val pendingTasks = db.taskDao().getPendingTasksForDate(todayStr)
                 val topTask = pendingTasks.firstOrNull()
 
                 val notificationId = when (reminderType) {

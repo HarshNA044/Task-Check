@@ -13,10 +13,8 @@ import com.example.data.model.ProductivityRecordEntity
 import com.example.data.model.ProductivitySummary
 import com.example.data.model.TaskEntity
 import com.example.data.model.TaskPriority
-import com.example.data.model.UserProfile
 import com.example.data.repository.TaskRepository
 import com.example.notification.AlarmScheduler
-import com.example.notification.NotificationHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,7 +23,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -39,9 +36,6 @@ class MainViewModel(
     private val themePreferences: ThemePreferences
 ) : ViewModel() {
 
-    val activeUserId: StateFlow<String> = themePreferences.activeUserId
-    val savedAccounts: StateFlow<List<UserProfile>> = themePreferences.savedAccounts
-
     val dateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
 
     val themeMode: StateFlow<AppThemeMode> = themePreferences.themeMode
@@ -50,7 +44,6 @@ class MainViewModel(
     val eveningHour: StateFlow<Int> = themePreferences.eveningHour
     val eveningMinute: StateFlow<Int> = themePreferences.eveningMinute
     val soundEnabled: StateFlow<Boolean> = themePreferences.soundEnabled
-    val userProfile: StateFlow<UserProfile> = themePreferences.userProfile
 
     private val _selectedDate = MutableStateFlow(LocalDate.now())
     val selectedDate: StateFlow<LocalDate> = _selectedDate.asStateFlow()
@@ -77,24 +70,18 @@ class MainViewModel(
     private val _isSettingsSheetOpen = MutableStateFlow(false)
     val isSettingsSheetOpen: StateFlow<Boolean> = _isSettingsSheetOpen.asStateFlow()
 
-    private val _isProfileDialogOpen = MutableStateFlow(false)
-    val isProfileDialogOpen: StateFlow<Boolean> = _isProfileDialogOpen.asStateFlow()
-
     private val _isGraphsExpanded = MutableStateFlow(false)
     val isGraphsExpanded: StateFlow<Boolean> = _isGraphsExpanded.asStateFlow()
 
     private val _rolloverNotificationCount = MutableStateFlow<Int?>(null)
     val rolloverNotificationCount: StateFlow<Int?> = _rolloverNotificationCount.asStateFlow()
 
-    // Tasks for currently selected day scoped to active user
-    val rawTasksForSelectedDate: StateFlow<List<TaskEntity>> = combine(
-        _selectedDate,
-        activeUserId
-    ) { date, uid ->
-        Pair(date, uid)
-    }.flatMapLatest { (date, uid) ->
-        repository.getTasksForDate(uid, date.format(dateFormatter))
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    // Tasks for currently selected day stored on local device
+    val rawTasksForSelectedDate: StateFlow<List<TaskEntity>> = _selectedDate
+        .flatMapLatest { date ->
+            repository.getTasksForDate(date.format(dateFormatter))
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // Filtered tasks for UI
     val filteredTasks: StateFlow<List<TaskEntity>> = combine(
@@ -113,16 +100,13 @@ class MainViewModel(
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // All tasks for the visible month to populate calendar day badges scoped to user
-    val monthTasks: StateFlow<List<TaskEntity>> = combine(
-        _currentMonth,
-        activeUserId
-    ) { ym, uid ->
-        Pair(ym, uid)
-    }.flatMapLatest { (ym, uid) ->
-        val monthPattern = ym.format(DateTimeFormatter.ofPattern("yyyy-MM"))
-        repository.getTasksForMonth(uid, monthPattern)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    // All tasks for the visible month to populate calendar day badges
+    val monthTasks: StateFlow<List<TaskEntity>> = _currentMonth
+        .flatMapLatest { ym ->
+            val monthPattern = ym.format(DateTimeFormatter.ofPattern("yyyy-MM"))
+            repository.getTasksForMonth(monthPattern)
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // Badges per day mapped by "yyyy-MM-dd"
     val monthDayBadges: StateFlow<Map<String, DayBadgeInfo>> = monthTasks.map { tasks ->
@@ -138,25 +122,24 @@ class MainViewModel(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
     // Past 7-day tasks for dynamic graph & stats
-    private val past7DaysTasks: StateFlow<List<TaskEntity>> = activeUserId.flatMapLatest { uid ->
+    private val past7DaysTasks: StateFlow<List<TaskEntity>> = _selectedDate.flatMapLatest {
         val today = LocalDate.now()
         val startDateStr = today.minusDays(6).format(dateFormatter)
         val endDateStr = today.format(dateFormatter)
-        repository.getTasksForDateRange(uid, startDateStr, endDateStr)
+        repository.getTasksForDateRange(startDateStr, endDateStr)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // Database productivity history (contains logged negative scores for uncompleted rolled-over days)
-    private val productivityDbHistory: StateFlow<List<ProductivityRecordEntity>> = activeUserId.flatMapLatest { uid ->
-        repository.getProductivityHistory(uid, 30)
+    private val productivityDbHistory: StateFlow<List<ProductivityRecordEntity>> = _selectedDate.flatMapLatest {
+        repository.getProductivityHistory(30)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // Productivity History & 7-Day Stats dynamically calculated from actual tasks and persisted penalties
+    // Productivity History & 7-Day Stats dynamically calculated from local device data
     val productivitySummary: StateFlow<ProductivitySummary> = combine(
         rawTasksForSelectedDate,
         past7DaysTasks,
-        productivityDbHistory,
-        activeUserId
-    ) { todayTasks, rangeTasks, dbHistory, uid ->
+        productivityDbHistory
+    ) { todayTasks, rangeTasks, dbHistory ->
         val today = LocalDate.now()
         val todayDateStr = today.format(dateFormatter)
 
@@ -175,7 +158,7 @@ class MainViewModel(
 
             if (dStr == todayDateStr) {
                 ProductivityRecordEntity(
-                    userId = uid,
+                    userId = "local_device",
                     date = dStr,
                     completedCount = completed,
                     totalCount = total,
@@ -183,7 +166,6 @@ class MainViewModel(
                     score = todayScore
                 )
             } else {
-                // Check if there is an explicit record in the database for this past date
                 val savedRecord = dbHistory.find { it.date == dStr }
                 val dTasks = tasksByDate[dStr] ?: emptyList()
                 val rolledFromThisDate = (todayTasks + rangeTasks).filter { it.originalDate == dStr }
@@ -202,7 +184,7 @@ class MainViewModel(
                         100
                     }
                     ProductivityRecordEntity(
-                        userId = uid,
+                        userId = "local_device",
                         date = dStr,
                         completedCount = dCompleted,
                         totalCount = dTotal,
@@ -211,7 +193,7 @@ class MainViewModel(
                     )
                 } else {
                     ProductivityRecordEntity(
-                        userId = uid,
+                        userId = "local_device",
                         date = dStr,
                         completedCount = 0,
                         totalCount = 0,
@@ -260,9 +242,8 @@ class MainViewModel(
 
     fun performDailyRollover() {
         viewModelScope.launch(Dispatchers.IO) {
-            val uid = activeUserId.value
             val todayStr = LocalDate.now().format(dateFormatter)
-            val rolledCount = repository.rolloverUncompletedTasks(uid, todayStr)
+            val rolledCount = repository.rolloverUncompletedTasks(todayStr)
             if (rolledCount > 0) {
                 _rolloverNotificationCount.value = rolledCount
             }
@@ -321,34 +302,6 @@ class MainViewModel(
         _isSettingsSheetOpen.value = false
     }
 
-    fun openProfileDialog() {
-        _isProfileDialogOpen.value = true
-    }
-
-    fun closeProfileDialog() {
-        _isProfileDialogOpen.value = false
-    }
-
-    fun updateUserProfile(profile: UserProfile) {
-        themePreferences.updateUserProfile(profile)
-    }
-
-    fun signUpWithGoogle(name: String, email: String, bio: String = "Productive & Focused", photoUrl: String? = null) {
-        themePreferences.signUpWithGoogle(name, email, bio, photoUrl)
-    }
-
-    fun signInWithGoogle(name: String, email: String, photoUrl: String? = null) {
-        themePreferences.signInWithGoogle(name, email, photoUrl)
-    }
-
-    fun switchAccount(email: String, name: String) {
-        themePreferences.switchAccount(email, name)
-    }
-
-    fun signOut() {
-        themePreferences.signOut()
-    }
-
     fun toggleGraphsExpanded() {
         _isGraphsExpanded.value = !_isGraphsExpanded.value
     }
@@ -385,11 +338,9 @@ class MainViewModel(
         viewModelScope.launch {
             val currentEditing = _editingTask.value
             val dateStr = date.format(dateFormatter)
-            val uid = activeUserId.value
 
             val taskId = if (currentEditing != null) {
                 val updated = currentEditing.copy(
-                    userId = uid,
                     title = title.trim(),
                     description = description.trim(),
                     date = dateStr,
@@ -400,7 +351,6 @@ class MainViewModel(
                 updated.id
             } else {
                 val newTask = TaskEntity(
-                    userId = uid,
                     title = title.trim(),
                     description = description.trim(),
                     date = dateStr,
@@ -460,8 +410,7 @@ class MainViewModel(
 
     fun clearAllTasks() {
         viewModelScope.launch {
-            val uid = activeUserId.value
-            repository.clearAllData(uid)
+            repository.clearAllData()
         }
     }
 
